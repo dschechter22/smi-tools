@@ -155,18 +155,24 @@ const NUMERIC_COLS = [
   { key: 'InsPmtAmt', label: 'Ins Payment ($)' },
   { key: 'PtPmtAmt', label: 'Pt Payment ($)' },
   { key: 'Balance', label: 'Balance ($)' },
-  { key: 'ChgCt', label: 'Charge Count' },
 ];
 
 export function buildDefaultFilters() {
   const f = {};
   for (const c of CATEGORICAL_COLS) f[c.key] = [];
   for (const c of NUMERIC_COLS) f[c.key] = ['', ''];
+  f.excludeCredits = true;        // new: exclude ChgAmt <= 0 rows by default
+  f.excludeNonType1CPT = false;   // new: exclude CPT codes with letters
   return f;
 }
 
 export function applyFilters(data, filters) {
   return data.filter((row) => {
+    // Credits/takebacks exclusion
+    if (filters.excludeCredits && (row.ChgAmt == null || row.ChgAmt <= 0)) return false;
+    // Non-type-1 CPT exclusion
+    if (filters.excludeNonType1CPT && row.CPTCode && /[a-zA-Z]/.test(row.CPTCode)) return false;
+
     for (const { key } of CATEGORICAL_COLS) {
       const sel = filters[key];
       if (sel && sel.length > 0 && !sel.includes(row[key])) return false;
@@ -185,6 +191,8 @@ export function applyFilters(data, filters) {
 
 export function countActiveFilters(filters) {
   let count = 0;
+  // excludeCredits defaults ON — don't count it as active unless turned off
+  if (filters.excludeNonType1CPT) count++;
   for (const { key } of CATEGORICAL_COLS) {
     if (filters[key] && filters[key].length > 0) count++;
   }
@@ -223,6 +231,26 @@ export default function FilterBar({ columnMeta, filters, onFilterChange, onClear
           <span className="filter-badge">{activeCount} active</span>
         )}
         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{open ? '▲ collapse' : '▼ expand'}</span>
+      </div>
+
+      {/* Quick toggles — always visible */}
+      <div className="filter-quick-toggles">
+        <label className="filter-toggle-label">
+          <input
+            type="checkbox"
+            checked={filters.excludeCredits}
+            onChange={(e) => onFilterChange({ ...filters, excludeCredits: e.target.checked })}
+          />
+          Exclude credits/takebacks (ChgAmt ≤ 0)
+        </label>
+        <label className="filter-toggle-label">
+          <input
+            type="checkbox"
+            checked={filters.excludeNonType1CPT}
+            onChange={(e) => onFilterChange({ ...filters, excludeNonType1CPT: e.target.checked })}
+          />
+          Exclude non-type-1 CPTs (HCPCS / Cat II / Cat III)
+        </label>
       </div>
 
       {open && (
