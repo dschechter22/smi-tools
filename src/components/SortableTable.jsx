@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 
 function downloadCSV(columns, data, filename = 'export.csv') {
   const headers = columns.map((c) => c.label).join(',');
@@ -7,7 +7,6 @@ function downloadCSV(columns, data, filename = 'export.csv') {
       .map((c) => {
         const rawVal = c.csvValue ? c.csvValue(row) : row[c.key];
         const val = rawVal == null ? '' : String(rawVal);
-        // Escape quotes and wrap if needed
         if (val.includes(',') || val.includes('"') || val.includes('\n')) {
           return '"' + val.replace(/"/g, '""') + '"';
         }
@@ -25,6 +24,82 @@ function downloadCSV(columns, data, filename = 'export.csv') {
   URL.revokeObjectURL(url);
 }
 
+// Compact multiselect dropdown for table column headers
+function ColMultiSelect({ options, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const visibleOptions = search
+    ? options.filter((o) => o.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  const toggle = (val) =>
+    onChange(selected.includes(val) ? selected.filter((v) => v !== val) : [...selected, val]);
+
+  const label =
+    selected.length === 0 ? 'All' : selected.length === 1 ? selected[0] : `${selected.length} sel`;
+
+  return (
+    <div className="col-multi-select" ref={ref}>
+      <button
+        type="button"
+        className="col-multi-trigger"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+      >
+        <span>{label}</span>
+        {selected.length > 0 && <span className="col-multi-badge">{selected.length}</span>}
+        <span style={{ fontSize: 9, color: 'var(--text-light)' }}>▾</span>
+      </button>
+      {open && (
+        <div className="col-multi-dropdown">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Search…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="col-multi-actions">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onChange([]); }}>Clear</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onChange([...visibleOptions]); }}>All visible</button>
+          </div>
+          <div className="col-multi-list">
+            {visibleOptions.length === 0 ? (
+              <div style={{ padding: '10px', textAlign: 'center', fontSize: 12, color: 'var(--text-light)' }}>No matches</div>
+            ) : (
+              visibleOptions.map((opt) => (
+                <label key={opt} className="col-multi-option">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(opt)}
+                    onChange={() => toggle(opt)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span title={opt}>{opt}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SortableTable({
   columns,
   data,
@@ -37,6 +112,7 @@ export default function SortableTable({
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
   const [colFilters, setColFilters] = useState({});
+  const [filtersVisible, setFiltersVisible] = useState(false);
 
   const handleSort = useCallback(
     (key) => {
@@ -51,6 +127,22 @@ export default function SortableTable({
     [sortKey]
   );
 
+  // Compute unique values for multiselect columns
+  const uniqueValues = useMemo(() => {
+    const result = {};
+    for (const col of columns) {
+      if (col.filterType === 'multiselect') {
+        const vals = new Set();
+        for (const row of data) {
+          const v = row[col.key];
+          if (v != null && String(v).trim() !== '') vals.add(String(v));
+        }
+        result[col.key] = Array.from(vals).sort((a, b) => a.localeCompare(b));
+      }
+    }
+    return result;
+  }, [data, columns]);
+
   const sorted = useMemo(() => {
     if (!sortKey) return data;
     return [...data].sort((a, b) => {
@@ -59,33 +151,47 @@ export default function SortableTable({
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
-      const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      const cmp =
+        typeof av === 'number' && typeof bv === 'number'
+          ? av - bv
+          : String(av).localeCompare(String(bv));
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [data, sortKey, sortDir]);
 
-  const hasActiveFilters = useMemo(() => {
-    return Object.values(colFilters).some((f) => {
-      if (!f) return false;
-      if (typeof f === 'string') return f.trim() !== '';
-      if (typeof f === 'object') return (f.gte != null && f.gte !== '') || (f.lte != null && f.lte !== '');
-      return false;
-    });
-  }, [colFilters]);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    for (const col of columns) {
+      if (!col.filterType) continue;
+      const f = colFilters[col.key];
+      if (!f) continue;
+      if (col.filterType === 'text' && typeof f === 'string' && f.trim() !== '') count++;
+      if (col.filterType === 'multiselect' && Array.isArray(f) && f.length > 0) count++;
+      if (col.filterType === 'number' && typeof f === 'object') {
+        if ((f.gte != null && f.gte !== '') || (f.lte != null && f.lte !== '')) count++;
+      }
+    }
+    return count;
+  }, [colFilters, columns]);
 
   const filtered = useMemo(() => {
-    if (!hasActiveFilters) return sorted;
+    if (activeFilterCount === 0) return sorted;
     return sorted.filter((row) => {
       for (const col of columns) {
         if (!col.filterType) continue;
         const filter = colFilters[col.key];
         if (!filter) continue;
         const rawVal = row[col.key];
+
         if (col.filterType === 'text') {
           if (typeof filter === 'string' && filter.trim() !== '') {
-            const search = filter.trim().toLowerCase();
             const val = rawVal == null ? '' : String(rawVal).toLowerCase();
-            if (!val.includes(search)) return false;
+            if (!val.includes(filter.trim().toLowerCase())) return false;
+          }
+        } else if (col.filterType === 'multiselect') {
+          if (Array.isArray(filter) && filter.length > 0) {
+            const val = rawVal == null ? '' : String(rawVal);
+            if (!filter.includes(val)) return false;
           }
         } else if (col.filterType === 'number') {
           if (typeof filter === 'object') {
@@ -101,7 +207,7 @@ export default function SortableTable({
       }
       return true;
     });
-  }, [sorted, colFilters, columns, hasActiveFilters]);
+  }, [sorted, colFilters, columns, activeFilterCount]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -109,11 +215,14 @@ export default function SortableTable({
   const pageEnd = Math.min(pageStart + pageSize, filtered.length);
   const pageRows = filtered.slice(pageStart, pageEnd);
 
-  const handleExport = () => {
-    downloadCSV(columns, filtered, exportFilename);
-  };
+  const handleExport = () => downloadCSV(columns, filtered, exportFilename);
 
   const handleTextFilter = (key, value) => {
+    setColFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(1);
+  };
+
+  const handleMultiselectFilter = (key, value) => {
     setColFilters((prev) => ({ ...prev, [key]: value }));
     setPage(1);
   };
@@ -140,6 +249,27 @@ export default function SortableTable({
 
   return (
     <div className="panel">
+      {/* Toolbar: filter toggle + export */}
+      {hasFilterRow && (
+        <div className="table-toolbar">
+          <button
+            className={`btn btn-sm ${filtersVisible ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setFiltersVisible((v) => !v)}
+          >
+            ⚙ Column Filters{activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}
+            {filtersVisible ? ' ▲' : ' ▼'}
+          </button>
+          {activeFilterCount > 0 && !filtersVisible && (
+            <button
+              className="btn btn-sm btn-secondary"
+              style={{ color: 'var(--danger)' }}
+              onClick={clearAllFilters}
+            >
+              Clear {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''}
+            </button>
+          )}
+        </div>
+      )}
       <div className="table-wrapper">
         {sorted.length === 0 ? (
           <div className="empty-state">
@@ -170,10 +300,10 @@ export default function SortableTable({
                   );
                 })}
               </tr>
-              {hasFilterRow && (
+              {hasFilterRow && filtersVisible && (
                 <tr className="col-filter-row">
                   {columns.map((col) => (
-                    <th key={col.key}>
+                    <th key={col.key} style={{ position: 'relative' }}>
                       {col.filterType === 'text' && (
                         <input
                           type="text"
@@ -182,6 +312,13 @@ export default function SortableTable({
                           value={colFilters[col.key] || ''}
                           onChange={(e) => handleTextFilter(col.key, e.target.value)}
                           onClick={(e) => e.stopPropagation()}
+                        />
+                      )}
+                      {col.filterType === 'multiselect' && (
+                        <ColMultiSelect
+                          options={uniqueValues[col.key] || []}
+                          selected={colFilters[col.key] || []}
+                          onChange={(val) => handleMultiselectFilter(col.key, val)}
                         />
                       )}
                       {col.filterType === 'number' && (
@@ -236,13 +373,14 @@ export default function SortableTable({
         <div className="pagination">
           <span>
             {filtered.length} row{filtered.length !== 1 ? 's' : ''}
-            {hasActiveFilters && sorted.length !== filtered.length && ` (filtered from ${sorted.length})`}
+            {activeFilterCount > 0 && sorted.length !== filtered.length &&
+              ` (filtered from ${sorted.length})`}
             {' '}— showing {filtered.length > 0 ? pageStart + 1 : 0}–{pageEnd}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {hasActiveFilters && (
+            {activeFilterCount > 0 && filtersVisible && (
               <span className="table-filter-active-note">
-                <button onClick={clearAllFilters}>Clear filters</button>
+                <button onClick={clearAllFilters}>Clear all filters</button>
               </span>
             )}
             {showExport && (
@@ -253,9 +391,7 @@ export default function SortableTable({
             <div className="pagination-controls">
               <button onClick={() => setPage(1)} disabled={safePage === 1}>«</button>
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1}>‹</button>
-              <span className="page-num">
-                Page {safePage} / {totalPages}
-              </span>
+              <span className="page-num">Page {safePage} / {totalPages}</span>
               <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}>›</button>
               <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}>»</button>
             </div>

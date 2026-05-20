@@ -1,18 +1,7 @@
 import React, { useMemo } from 'react';
 import { calculateLocationComparison } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
-
-function fmtPct(n) {
-  if (n == null) return '—';
-  return `${(n * 100).toFixed(1)}%`;
-}
-
-function fmt$(n) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
-}
+import { fmt$, fmtRate } from '../../utils/format.js';
 
 function InfoBox({ children }) {
   return (
@@ -39,7 +28,7 @@ function VarianceBar({ variance }) {
       <div style={{ flex: 1, height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden', maxWidth: 80 }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 4 }} />
       </div>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color }}>{fmtPct(variance)}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color }}>{fmtRate(variance)}</span>
     </div>
   );
 }
@@ -48,8 +37,8 @@ export default function LocationComparisonTab({ filteredData }) {
   const comparisons = useMemo(() => calculateLocationComparison(filteredData), [filteredData]);
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
-    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'multiselect' },
+    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'multiselect' },
     {
       key: 'states',
       label: 'States',
@@ -78,7 +67,7 @@ export default function LocationComparisonTab({ filteredData }) {
       filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
-      render: (r) => <span className="rate-red">{fmtPct(r.minRate)}</span>,
+      render: (r) => <span className="rate-red">{fmtRate(r.minRate)}</span>,
       csvValue: (r) => r.minRate != null ? (r.minRate * 100).toFixed(2) + '%' : '',
     },
     {
@@ -88,7 +77,7 @@ export default function LocationComparisonTab({ filteredData }) {
       filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
-      render: (r) => <span className="rate-green">{fmtPct(r.maxRate)}</span>,
+      render: (r) => <span className="rate-green">{fmtRate(r.maxRate)}</span>,
       csvValue: (r) => r.maxRate != null ? (r.maxRate * 100).toFixed(2) + '%' : '',
     },
     {
@@ -144,7 +133,7 @@ export default function LocationComparisonTab({ filteredData }) {
           <div className="summary-item">
             <div className="si-label">Highest Variance</div>
             <div className="si-value" style={{ color: 'var(--danger)' }}>
-              {fmtPct(comparisons[0].variance)}
+              {fmtRate(comparisons[0].variance)}
             </div>
           </div>
         )}

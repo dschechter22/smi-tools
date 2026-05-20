@@ -11,18 +11,7 @@ import {
 } from 'recharts';
 import { calculatePatientInsuranceSplit } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
-
-function fmt$(n) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
-}
-
-function fmtPct(n) {
-  if (n == null) return '—';
-  return `${n.toFixed(1)}%`;
-}
+import { fmt$, fmtPct } from '../../utils/format.js';
 
 function InfoBox({ children }) {
   return (
@@ -68,7 +57,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
   }, [totalInsPmt, totalPtPmt]);
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'multiselect' },
     {
       key: 'totalChgAmt',
       label: 'Total Charges',

@@ -11,18 +11,7 @@ import {
 } from 'recharts';
 import { calculatePayerDenialStats, calculateTopDenialCodes } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
-
-function fmt$(n) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
-}
-
-function fmtPct(n, decimals = 1) {
-  if (n == null) return '—';
-  return `${n.toFixed(decimals)}%`;
-}
+import { fmt$, fmtPct } from '../../utils/format.js';
 
 function InfoBox({ children }) {
   return (
@@ -68,7 +57,7 @@ export default function DenialAnalysisTab({ filteredData }) {
   const totalRedeniedAmt = useMemo(() => denialStats.reduce((s, p) => s + p.redeniedChgAmt, 0), [denialStats]);
 
   const payerColumns = [
-    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'multiselect' },
     {
       key: 'totalChgAmt',
       label: 'Total Charged',
@@ -119,6 +108,7 @@ export default function DenialAnalysisTab({ filteredData }) {
       key: 'top3Codes',
       label: 'Top 3 Denial Codes',
       sortable: false,
+      filterType: 'text',
       render: (r) => <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.top3Codes}</span>,
     },
   ];
@@ -206,7 +196,7 @@ export default function DenialAnalysisTab({ filteredData }) {
                   y={parseFloat(avgDenialRate.toFixed(1))}
                   stroke="#b45309"
                   strokeDasharray="4 2"
-                  label={{ value: `Avg ${avgDenialRate.toFixed(1)}%`, fontSize: 11, fill: '#b45309', position: 'right' }}
+                  label={{ value: `Avg ${Math.round(avgDenialRate)}%`, fontSize: 11, fill: '#b45309', position: 'right' }}
                 />
                 <Bar
                   dataKey="rate"

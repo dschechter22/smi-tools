@@ -1,13 +1,7 @@
 import React, { useMemo } from 'react';
 import { calculateReDenials } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
-
-function fmt$(n) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
-}
+import { fmt$ } from '../../utils/format.js';
 
 function InfoBox({ children }) {
   return (
@@ -33,12 +27,13 @@ export default function ReDenialTab({ filteredData }) {
   );
 
   const rowColumns = [
-    { key: 'PrimIns', label: 'Payer', sortable: true },
-    { key: 'CPTCode', label: 'CPT', sortable: true },
+    { key: 'PrimIns', label: 'Payer', sortable: true, filterType: 'multiselect' },
+    { key: 'CPTCode', label: 'CPT', sortable: true, filterType: 'multiselect' },
     {
       key: 'FirstDenialCode',
       label: '1st Denial Code',
       sortable: true,
+      filterType: 'multiselect',
       render: (r) => (
         <span>
           <span className="badge badge-yellow" style={{ marginRight: 4 }}>{r.FirstDenialCode}</span>
@@ -50,6 +45,7 @@ export default function ReDenialTab({ filteredData }) {
       key: 'LastDenialCode',
       label: 'Last Denial Code',
       sortable: true,
+      filterType: 'multiselect',
       render: (r) => (
         <span>
           <span className="badge badge-red" style={{ marginRight: 4 }}>{r.LastDenialCode}</span>
@@ -61,6 +57,7 @@ export default function ReDenialTab({ filteredData }) {
       key: 'ChgAmt',
       label: 'Charge Amt',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => fmt$(r.ChgAmt),
@@ -70,6 +67,7 @@ export default function ReDenialTab({ filteredData }) {
       key: 'Balance',
       label: 'Balance',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => <span style={{ color: r.Balance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.Balance)}</span>,
@@ -79,6 +77,7 @@ export default function ReDenialTab({ filteredData }) {
       key: 'ChgStatus',
       label: 'Status',
       sortable: true,
+      filterType: 'multiselect',
       render: (r) => {
         const cls =
           r.ChgStatus === 'Closed / Paid' ? 'badge-green'

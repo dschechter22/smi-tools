@@ -11,18 +11,7 @@ import {
 } from 'recharts';
 import { calculateCPTBenchmarks, calculateUnderpaymentStats } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
-
-function fmt$(n) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
-}
-
-function fmtPct(n) {
-  if (n == null) return '—';
-  return `${(n * 100).toFixed(1)}%`;
-}
+import { fmt$, fmtRate } from '../../utils/format.js';
 
 function InfoBox({ children }) {
   return (
@@ -81,8 +70,8 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
   );
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
-    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'multiselect' },
+    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'multiselect' },
     {
       key: 'benchmark',
       label: `Benchmark (dollar-weighted)`,
@@ -90,7 +79,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
-      render: (r) => r.benchmark == null ? <span className="insuf-data">Insuf. data</span> : fmtPct(r.benchmark),
+      render: (r) => r.benchmark == null ? <span className="insuf-data">Insuf. data</span> : fmtRate(r.benchmark),
       csvValue: (r) => r.benchmark != null ? (r.benchmark * 100).toFixed(2) + '%' : '',
     },
     {
@@ -100,7 +89,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
-      render: (r) => fmtPct(r.payerRate),
+      render: (r) => fmtRate(r.payerRate),
       csvValue: (r) => r.payerRate != null ? (r.payerRate * 100).toFixed(2) + '%' : '',
     },
     {
@@ -114,7 +103,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
         if (r.gapPct == null) return '—';
         const abs = Math.abs(r.gapPct);
         const cls = abs < 15 ? 'rate-yellow' : abs < 40 ? 'rate-orange' : 'rate-red';
-        return <span className={cls}>{r.gapPct.toFixed(1)}%</span>;
+        return <span className={cls}>{Math.round(r.gapPct)}%</span>;
       },
       csvValue: (r) => r.gapPct != null ? r.gapPct.toFixed(2) + '%' : '',
     },

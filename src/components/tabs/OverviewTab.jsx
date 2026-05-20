@@ -10,6 +10,7 @@ import {
   Cell,
 } from 'recharts';
 import { calculateOverviewStats } from '../../utils/calculations.js';
+import { fmt$, fmtPct, fmtRate } from '../../utils/format.js';
 
 const STATUS_COLORS = {
   'Closed / Paid': '#15803d',
@@ -19,17 +20,6 @@ const STATUS_COLORS = {
 };
 
 const INS_TYPE_COLORS = ['#1e40af', '#0e7490', '#6d28d9', '#b45309', '#065f46', '#9f1239', '#1e3a5f'];
-
-function fmt$(n) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
-}
-
-function fmtPct(n) {
-  return n != null ? `${(n * 100).toFixed(1)}%` : '—';
-}
 
 function InfoBox({ children }) {
   return (
@@ -122,7 +112,7 @@ export default function OverviewTab({ filteredData }) {
       {/* Summary Cards */}
       <div className="cards-grid">
         <StatCard label="Total Charges" value={fmt$(stats.totalChgAmt)} sub={`${stats.rowCount.toLocaleString()} data rows`} accent="#1e40af" />
-        <StatCard label="Ins Payments" value={fmt$(stats.totalInsPmt)} sub={`Rate: ${fmtPct(stats.overallPaymentRate)}`} accent="#15803d" />
+        <StatCard label="Ins Payments" value={fmt$(stats.totalInsPmt)} sub={`Rate: ${fmtRate(stats.overallPaymentRate)}`} accent="#15803d" />
         <StatCard label="Patient Payments" value={fmt$(stats.totalPtPmt)} accent="#0e7490" />
         <StatCard label="Total Balance" value={fmt$(stats.totalBalance)} accent="#b45309" />
         <StatCard
@@ -131,10 +121,10 @@ export default function OverviewTab({ filteredData }) {
           sub="ChgAmt − InsPmt − PtPmt − Bal"
           accent="#b91c1c"
         />
-        <StatCard label="Overall Pay Rate" value={fmtPct(stats.overallPaymentRate)} sub="InsPmt / ChgAmt" accent="#6d28d9" />
+        <StatCard label="Overall Pay Rate" value={fmtRate(stats.overallPaymentRate)} sub="InsPmt / ChgAmt" accent="#6d28d9" />
         <StatCard
           label="Denial Rate (by $)"
-          value={`${stats.denialRateDollar.toFixed(1)}%`}
+          value={fmtPct(stats.denialRateDollar)}
           sub="Denied ChgAmt / Total ChgAmt"
           accent="#b91c1c"
         />
@@ -153,7 +143,7 @@ export default function OverviewTab({ filteredData }) {
               <BarChart data={statusChartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(v) => v.replace(' / ', '\n/ ')} />
-                <YAxis tick={{ fontSize: 11 }} width={50} />
+                <YAxis tick={{ fontSize: 11 }} width={80} tickFormatter={(v) => fmt$(v)} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="Amount" radius={[3, 3, 0, 0]}>
                   {statusChartData.map((entry, i) => (
@@ -173,7 +163,7 @@ export default function OverviewTab({ filteredData }) {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={insTypeChartData} margin={{ top: 4, right: 16, left: 0, bottom: 36 }} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => fmt$(v)} />
                 <YAxis
                   type="category"
                   dataKey="name"
@@ -182,7 +172,7 @@ export default function OverviewTab({ filteredData }) {
                   tickFormatter={(v) => (v.length > 14 ? v.slice(0, 14) + '…' : v)}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="Count" radius={[0, 3, 3, 0]}>
+                <Bar dataKey="Amount" radius={[0, 3, 3, 0]}>
                   {insTypeChartData.map((entry, i) => (
                     <Cell key={i} fill={entry.fill} />
                   ))}

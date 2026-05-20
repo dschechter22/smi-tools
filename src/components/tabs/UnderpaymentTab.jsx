@@ -1,18 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { calculateCPTBenchmarks, calculateUnderpaymentStats } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
-
-function fmt$(n) {
-  if (n == null) return '—';
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
-}
-
-function fmtPct(n, decimals = 1) {
-  if (n == null) return '—';
-  return `${(n * 100).toFixed(decimals)}%`;
-}
+import { fmt$, fmtRate } from '../../utils/format.js';
 
 function getRateClass(payerRate, benchmark) {
   if (benchmark == null || payerRate == null) return '';
@@ -65,9 +54,9 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
   );
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
-    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
-    { key: 'payerType', label: 'Payer Type', sortable: true, filterType: 'text' },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'multiselect' },
+    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'multiselect' },
+    { key: 'payerType', label: 'Payer Type', sortable: true, filterType: 'multiselect' },
     {
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
@@ -91,7 +80,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
             {r.payerRate < 0.02 && <span className="not-paying-badge">NOT PAYING</span>}
             <span className={getRateClass(r.payerRate, r.benchmark)}>
-              {fmtPct(r.payerRate)}
+              {fmtRate(r.payerRate)}
             </span>
           </span>
         );
@@ -109,7 +98,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
         r.benchmark == null ? (
           <span className="insuf-data">Insufficient data</span>
         ) : (
-          fmtPct(r.benchmark)
+          fmtRate(r.benchmark)
         ),
       csvValue: (r) => r.benchmark != null ? (r.benchmark * 100).toFixed(2) + '%' : 'Insufficient data',
     },
@@ -123,7 +112,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
       render: (r) => {
         if (r.gapPct == null) return '—';
         const cls = r.gapPct >= 0 ? 'rate-green' : r.gapPct >= -15 ? 'rate-yellow' : r.gapPct >= -40 ? 'rate-orange' : 'rate-red';
-        return <span className={cls}>{r.gapPct >= 0 ? '+' : ''}{r.gapPct.toFixed(1)}%</span>;
+        return <span className={cls}>{r.gapPct >= 0 ? '+' : ''}{Math.round(r.gapPct)}%</span>;
       },
       csvValue: (r) => r.gapPct != null ? r.gapPct.toFixed(2) + '%' : '',
     },
@@ -231,11 +220,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
         <div className="summary-item">
           <div className="si-label">Total Dollar Impact</div>
           <div className="si-value" style={{ color: totalImpact > 0 ? 'var(--danger)' : 'var(--success)' }}>
-            {totalImpact >= 1_000_000
-              ? `$${(totalImpact / 1_000_000).toFixed(2)}M`
-              : totalImpact >= 1_000
-              ? `$${(totalImpact / 1_000).toFixed(1)}K`
-              : `$${totalImpact.toFixed(2)}`}
+            {fmt$(totalImpact)}
           </div>
         </div>
         <div className="summary-item">
