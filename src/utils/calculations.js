@@ -1,5 +1,12 @@
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+// Returns true only for a real denial code — filters out NULL, empty, N/A, etc.
+function isDenialCode(val) {
+  if (val == null) return false;
+  const s = String(val).trim().toUpperCase();
+  return s !== '' && s !== 'NULL' && s !== 'N/A' && s !== 'NA' && s !== 'NONE' && s !== '0';
+}
+
 export function median(arr) {
   if (!arr || arr.length === 0) return null;
   const sorted = [...arr].sort((a, b) => a - b);
@@ -128,14 +135,13 @@ export function calculatePayerDenialStats(filteredData) {
     const p = payerMap[payer];
     p.total += 1;
 
-    const hasDenial = row.FirstDenialCode && row.FirstDenialCode.trim() !== '';
+    const hasDenial = isDenialCode(row.FirstDenialCode);
     if (hasDenial) {
       p.denied += 1;
       const code = row.FirstDenialCode.trim();
       p.codes[code] = (p.codes[code] || 0) + 1;
 
-      const hasLastDenial = row.LastDenialCode && row.LastDenialCode.trim() !== '';
-      if (hasLastDenial && row.LastDenialCode.trim() !== row.FirstDenialCode.trim()) {
+      if (isDenialCode(row.LastDenialCode) && row.LastDenialCode.trim() !== row.FirstDenialCode.trim()) {
         p.redenied += 1;
       }
     }
@@ -165,8 +171,9 @@ export function calculateTopDenialCodes(filteredData) {
   const total = filteredData.length;
   const codeCounts = {};
   for (const row of filteredData) {
-    const code = row.FirstDenialCode && row.FirstDenialCode.trim();
-    if (code) codeCounts[code] = (codeCounts[code] || 0) + 1;
+    if (!isDenialCode(row.FirstDenialCode)) continue;
+    const code = row.FirstDenialCode.trim();
+    codeCounts[code] = (codeCounts[code] || 0) + 1;
   }
   return Object.entries(codeCounts)
     .sort((a, b) => b[1] - a[1])
@@ -183,9 +190,9 @@ export function calculateTopDenialCodes(filteredData) {
 
 export function calculateReDenials(filteredData) {
   const rows = filteredData.filter((row) => {
-    const first = row.FirstDenialCode && row.FirstDenialCode.trim();
-    const last = row.LastDenialCode && row.LastDenialCode.trim();
-    return first && last && first !== last;
+    return isDenialCode(row.FirstDenialCode) &&
+           isDenialCode(row.LastDenialCode) &&
+           row.FirstDenialCode.trim() !== row.LastDenialCode.trim();
   });
 
   // Pathway summary: FirstDenialCode → LastDenialCode
@@ -376,8 +383,9 @@ export function calculateOverviewStats(filteredData) {
   // Top 5 denial codes
   const denialCodeCounts = {};
   for (const row of filteredData) {
-    const c = row.FirstDenialCode && row.FirstDenialCode.trim();
-    if (c) denialCodeCounts[c] = (denialCodeCounts[c] || 0) + 1;
+    if (!isDenialCode(row.FirstDenialCode)) continue;
+    const c = row.FirstDenialCode.trim();
+    denialCodeCounts[c] = (denialCodeCounts[c] || 0) + 1;
   }
   const top5DenialCodes = Object.entries(denialCodeCounts)
     .sort((a, b) => b[1] - a[1])
