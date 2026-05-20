@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { calculateLocationComparison } from '../../utils/calculations.js';
+import React, { useMemo, useState } from 'react';
+import { calculateLocationComparison, fmt } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
+import DrillDownPanel from '../DrillDownPanel.jsx';
 import { fmt$, fmtRate } from '../../utils/format.js';
 
 function InfoBox({ children }) {
@@ -33,7 +34,63 @@ function VarianceBar({ variance }) {
   );
 }
 
+function LocationDrillDown({ row, filteredData }) {
+  const stateRows = useMemo(() => {
+    const byState = {};
+    for (const r of filteredData) {
+      if (r.PrimIns !== row.payer || r.CPTCode !== row.cpt) continue;
+      const state = r.Location_State || '(Unknown)';
+      if (!byState[state]) byState[state] = { state, chgAmt: 0, insPmt: 0 };
+      byState[state].chgAmt += fmt(r.ChgAmt);
+      byState[state].insPmt += fmt(r.InsPmtAmt);
+    }
+    return Object.values(byState)
+      .map(s => ({ ...s, rate: s.chgAmt > 0 ? s.insPmt / s.chgAmt : 0 }))
+      .sort((a, b) => b.rate - a.rate);
+  }, [row, filteredData]);
+
+  const bestRate = stateRows.length > 0 ? stateRows[0].rate : 0;
+  const totalChg = stateRows.reduce((s, r) => s + r.chgAmt, 0);
+
+  return (
+    <>
+      <div>
+        <div className="drill-section-title">Summary</div>
+        <div className="drill-kpis">
+          <div className="drill-kpi"><div className="drill-kpi-label">Payer</div><div className="drill-kpi-value" style={{ fontSize: 13 }}>{row.payer}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">CPT Code</div><div className="drill-kpi-value">{row.cpt}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Rate Variance</div><div className="drill-kpi-value" style={{ color: row.variance > 0.25 ? 'var(--danger)' : row.variance > 0.1 ? 'var(--warning)' : 'var(--success)' }}>{fmtRate(row.variance)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">States</div><div className="drill-kpi-value">{row.stateCount}</div></div>
+        </div>
+      </div>
+      <div>
+        <div className="drill-section-title">Rate by State</div>
+        <table className="drill-mini-table">
+          <thead><tr><th>State</th><th className="r">Total Chg</th><th className="r">Ins Pmt</th><th className="r">Rate</th><th className="r">vs Best</th><th className="r">Dollar Gap</th></tr></thead>
+          <tbody>
+            {stateRows.map(s => {
+              const ppDiff = s.rate - bestRate;
+              const dollarGap = (bestRate - s.rate) * s.chgAmt;
+              return (
+                <tr key={s.state}>
+                  <td><strong>{s.state}</strong></td>
+                  <td className="r">{fmt$(s.chgAmt)}</td>
+                  <td className="r">{fmt$(s.insPmt)}</td>
+                  <td className="r"><span className={s.rate === bestRate ? 'rate-green' : 'rate-red'}>{fmtRate(s.rate)}</span></td>
+                  <td className="r" style={{ color: ppDiff < 0 ? 'var(--danger)' : 'var(--success)', fontSize: 12 }}>{ppDiff >= 0 ? '+' : ''}{(ppDiff * 100).toFixed(1)} pp</td>
+                  <td className="r" style={{ color: dollarGap > 0 ? 'var(--danger)' : 'inherit' }}>{dollarGap > 0 ? `-${fmt$(dollarGap)}` : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function LocationComparisonTab({ filteredData }) {
+  const [drillRow, setDrillRow] = useState(null);
   const comparisons = useMemo(() => calculateLocationComparison(filteredData), [filteredData]);
 
   const columns = [
@@ -163,7 +220,18 @@ export default function LocationComparisonTab({ filteredData }) {
         pageSize={25}
         exportFilename="location_comparison.csv"
         emptyMessage="No payer/CPT combinations found in 2+ states with at least 5 charges. Ensure your data has Location_State populated."
+        onRowClick={setDrillRow}
       />
+
+      {drillRow && (
+        <DrillDownPanel
+          title={`${drillRow.payer} — CPT ${drillRow.cpt}`}
+          subtitle="Location Comparison — State-by-State Detail"
+          onClose={() => setDrillRow(null)}
+        >
+          <LocationDrillDown row={drillRow} filteredData={filteredData} />
+        </DrillDownPanel>
+      )}
     </div>
   );
 }

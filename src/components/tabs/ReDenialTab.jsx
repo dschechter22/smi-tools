@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { calculateReDenials } from '../../utils/calculations.js';
+import React, { useMemo, useState } from 'react';
+import { calculateReDenials, fmt } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
+import DrillDownPanel from '../DrillDownPanel.jsx';
 import { fmt$ } from '../../utils/format.js';
 
 function InfoBox({ children }) {
@@ -20,7 +21,124 @@ function InfoBox({ children }) {
   );
 }
 
+function PathwayDrillDown({ row, allRows }) {
+  const matchingRows = useMemo(() =>
+    allRows.filter(r => r.FirstDenialCode === row.firstCode && r.LastDenialCode === row.lastCode),
+    [row, allRows]
+  );
+
+  const byPayer = useMemo(() => {
+    const m = {};
+    for (const r of matchingRows) {
+      const key = r.PrimIns || '(Unknown)';
+      if (!m[key]) m[key] = { payer: key, chgAmt: 0, balance: 0, count: 0 };
+      m[key].chgAmt += fmt(r.ChgAmt);
+      m[key].balance += fmt(r.Balance);
+      m[key].count++;
+    }
+    return Object.values(m).sort((a, b) => b.chgAmt - a.chgAmt).slice(0, 10);
+  }, [matchingRows]);
+
+  const byCpt = useMemo(() => {
+    const m = {};
+    for (const r of matchingRows) {
+      const key = r.CPTCode || '(Unknown)';
+      if (!m[key]) m[key] = { cpt: key, chgAmt: 0, balance: 0, count: 0 };
+      m[key].chgAmt += fmt(r.ChgAmt);
+      m[key].balance += fmt(r.Balance);
+      m[key].count++;
+    }
+    return Object.values(m).sort((a, b) => b.chgAmt - a.chgAmt).slice(0, 10);
+  }, [matchingRows]);
+
+  const totalChg = matchingRows.reduce((s, r) => s + fmt(r.ChgAmt), 0);
+  const totalBal = matchingRows.reduce((s, r) => s + fmt(r.Balance), 0);
+  const uniquePayers = new Set(matchingRows.map(r => r.PrimIns)).size;
+
+  return (
+    <>
+      <div>
+        <div className="drill-section-title">Pathway Summary</div>
+        <div className="drill-kpis">
+          <div className="drill-kpi"><div className="drill-kpi-label">Total Chg $</div><div className="drill-kpi-value">{fmt$(totalChg)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Outstanding Balance</div><div className="drill-kpi-value" style={{ color: 'var(--danger)' }}>{fmt$(totalBal)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Records</div><div className="drill-kpi-value">{matchingRows.length}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Payers Affected</div><div className="drill-kpi-value">{uniquePayers}</div></div>
+        </div>
+      </div>
+      <div>
+        <div className="drill-section-title">Top Payers</div>
+        <table className="drill-mini-table">
+          <thead><tr><th>Payer</th><th className="r">Chg Amt</th><th className="r">Balance</th><th className="r">Count</th></tr></thead>
+          <tbody>
+            {byPayer.map(r => (
+              <tr key={r.payer}>
+                <td>{r.payer}</td>
+                <td className="r">{fmt$(r.chgAmt)}</td>
+                <td className="r" style={{ color: r.balance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.balance)}</td>
+                <td className="r">{r.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div className="drill-section-title">Top CPTs</div>
+        <table className="drill-mini-table">
+          <thead><tr><th>CPT</th><th className="r">Chg Amt</th><th className="r">Balance</th><th className="r">Count</th></tr></thead>
+          <tbody>
+            {byCpt.map(r => (
+              <tr key={r.cpt}>
+                <td><strong>{r.cpt}</strong></td>
+                <td className="r">{fmt$(r.chgAmt)}</td>
+                <td className="r" style={{ color: r.balance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.balance)}</td>
+                <td className="r">{r.count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function RowDetailDrillDown({ row }) {
+  const fields = [
+    { label: 'Payer', value: row.PrimIns },
+    { label: 'CPT Code', value: row.CPTCode },
+    { label: 'Charge Amount', value: fmt$(fmt(row.ChgAmt)) },
+    { label: 'Balance', value: fmt$(fmt(row.Balance)) },
+    { label: 'Status', value: row.ChgStatus },
+    { label: '1st Denial Code', value: row.FirstDenialCode },
+    { label: '1st Denial Group', value: row.FirstDenialGroup },
+    { label: 'Last Denial Code', value: row.LastDenialCode },
+    { label: 'Last Denial Group', value: row.LastDenialGroup },
+  ];
+
+  return (
+    <div>
+      <div className="drill-section-title">Bucket Details</div>
+      <table className="drill-mini-table">
+        <tbody>
+          {fields.map(f => (
+            <tr key={f.label}>
+              <td style={{ color: 'var(--text-muted)', width: 160 }}>{f.label}</td>
+              <td><strong>{f.value || '—'}</strong></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function ReDenialTab({ filteredData }) {
+  const [drillRow, setDrillRow] = useState(null);
+  const [drillType, setDrillType] = useState(null);
+
+  const openPathway = (row) => { setDrillRow(row); setDrillType('pathway'); };
+  const openBucket = (row) => { setDrillRow(row); setDrillType('bucket'); };
+
   const { rows, pathways, totalCount, totalExposure } = useMemo(
     () => calculateReDenials(filteredData),
     [filteredData]
@@ -185,6 +303,7 @@ export default function ReDenialTab({ filteredData }) {
             pageSize={25}
             exportFilename="redenial_pathways.csv"
             emptyMessage="No pathways found."
+            onRowClick={openPathway}
           />
         </>
       )}
@@ -202,6 +321,7 @@ export default function ReDenialTab({ filteredData }) {
             pageSize={25}
             exportFilename="redenial_claims.csv"
             emptyMessage="No re-denied buckets found."
+            onRowClick={openBucket}
           />
         </>
       )}
@@ -211,6 +331,25 @@ export default function ReDenialTab({ filteredData }) {
           <div className="empty-icon">✓</div>
           <p>No re-denial patterns detected in the filtered data.</p>
         </div>
+      )}
+
+      {drillRow && drillType === 'pathway' && (
+        <DrillDownPanel
+          title={`${drillRow.firstCode} → ${drillRow.lastCode}`}
+          subtitle="Re-denial Pathway Detail"
+          onClose={() => setDrillRow(null)}
+        >
+          <PathwayDrillDown row={drillRow} allRows={rows} />
+        </DrillDownPanel>
+      )}
+      {drillRow && drillType === 'bucket' && (
+        <DrillDownPanel
+          title={`${drillRow.PrimIns || '(Unknown)'} — ${drillRow.CPTCode || ''}`}
+          subtitle="Re-denied Bucket Detail"
+          onClose={() => setDrillRow(null)}
+        >
+          <RowDetailDrillDown row={drillRow} />
+        </DrillDownPanel>
       )}
     </div>
   );

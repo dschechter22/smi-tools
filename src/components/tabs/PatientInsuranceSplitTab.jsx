@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -9,8 +9,9 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { calculatePatientInsuranceSplit } from '../../utils/calculations.js';
+import { calculatePatientInsuranceSplit, fmt } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
+import DrillDownPanel from '../DrillDownPanel.jsx';
 import { fmt$, fmtPct } from '../../utils/format.js';
 
 function InfoBox({ children }) {
@@ -30,7 +31,65 @@ function InfoBox({ children }) {
   );
 }
 
+function PatientSplitDrillDown({ row, filteredData }) {
+  const cptRows = useMemo(() => {
+    const m = {};
+    for (const r of filteredData) {
+      if (r.PrimIns !== row.payer) continue;
+      const cpt = r.CPTCode || '(Unknown)';
+      if (!m[cpt]) m[cpt] = { cpt, chgAmt: 0, insPmt: 0, ptPmt: 0, balance: 0 };
+      m[cpt].chgAmt += fmt(r.ChgAmt);
+      m[cpt].insPmt += fmt(r.InsPmtAmt);
+      m[cpt].ptPmt += fmt(r.PtPmtAmt);
+      m[cpt].balance += fmt(r.Balance);
+    }
+    return Object.values(m)
+      .map(c => ({
+        ...c,
+        ptPct: (c.insPmt + c.ptPmt) > 0 ? (c.ptPmt / (c.insPmt + c.ptPmt)) * 100 : 0,
+        writeoffs: c.chgAmt - c.insPmt - c.ptPmt - c.balance,
+      }))
+      .sort((a, b) => b.chgAmt - a.chgAmt)
+      .slice(0, 15);
+  }, [row, filteredData]);
+
+  return (
+    <>
+      <div>
+        <div className="drill-section-title">Summary</div>
+        <div className="drill-kpis">
+          <div className="drill-kpi"><div className="drill-kpi-label">Total Charges</div><div className="drill-kpi-value">{fmt$(row.totalChgAmt)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Ins Payment</div><div className="drill-kpi-value" style={{ color: 'var(--primary)' }}>{fmt$(row.totalInsPmt)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Pt Payment</div><div className="drill-kpi-value" style={{ color: 'var(--orange)' }}>{fmt$(row.totalPtPmt)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Pt %</div><div className="drill-kpi-value" style={{ color: row.ptPct > 25 ? 'var(--danger)' : 'inherit' }}>{fmtPct(row.ptPct)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Balance</div><div className="drill-kpi-value" style={{ color: 'var(--danger)' }}>{fmt$(row.totalBalance)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Implied Write-offs</div><div className="drill-kpi-value" style={{ color: row.impliedWriteoffs > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(row.impliedWriteoffs)}</div></div>
+        </div>
+      </div>
+      <div>
+        <div className="drill-section-title">CPT Breakdown</div>
+        <table className="drill-mini-table">
+          <thead><tr><th>CPT</th><th className="r">Chg Amt</th><th className="r">Ins Pmt</th><th className="r">Pt Pmt</th><th className="r">Pt %</th><th className="r">Write-offs</th></tr></thead>
+          <tbody>
+            {cptRows.map(r => (
+              <tr key={r.cpt}>
+                <td><strong>{r.cpt}</strong></td>
+                <td className="r">{fmt$(r.chgAmt)}</td>
+                <td className="r" style={{ color: 'var(--primary)' }}>{fmt$(r.insPmt)}</td>
+                <td className="r" style={{ color: 'var(--orange)' }}>{fmt$(r.ptPmt)}</td>
+                <td className="r"><span className={r.ptPct < 10 ? 'rate-green' : r.ptPct < 25 ? 'rate-yellow' : r.ptPct < 40 ? 'rate-orange' : 'rate-red'}>{fmtPct(r.ptPct)}</span></td>
+                <td className="r" style={{ color: r.writeoffs > 0 ? 'var(--danger)' : 'inherit', fontSize: 12 }}>{fmt$(r.writeoffs)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function PatientInsuranceSplitTab({ filteredData }) {
+  const [drillRow, setDrillRow] = useState(null);
   const splitData = useMemo(() => calculatePatientInsuranceSplit(filteredData), [filteredData]);
 
   // Top 20 payers by charge amount for the stacked bar chart
@@ -238,7 +297,18 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
         pageSize={25}
         exportFilename="patient_insurance_split.csv"
         emptyMessage="No payer data found."
+        onRowClick={setDrillRow}
       />
+
+      {drillRow && (
+        <DrillDownPanel
+          title={drillRow.payer}
+          subtitle="Patient vs Insurance Split — Payer Detail"
+          onClose={() => setDrillRow(null)}
+        >
+          <PatientSplitDrillDown row={drillRow} filteredData={filteredData} />
+        </DrillDownPanel>
+      )}
     </div>
   );
 }

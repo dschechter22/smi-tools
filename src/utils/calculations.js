@@ -99,7 +99,7 @@ const TRUE_DENIAL_CODES = new Set([
 ]);
 
 // Returns true only if the code is both a valid denial code AND in the true-denial mapping.
-function isTrueDenial(val) {
+export function isTrueDenial(val) {
   if (!isDenialCode(val)) return false;
   return TRUE_DENIAL_CODES.has(String(val).trim().toUpperCase());
 }
@@ -123,7 +123,7 @@ export function getPaymentRate(row) {
   return row.InsPmtAmt / row.ChgAmt;
 }
 
-function fmt(n) {
+export function fmt(n) {
   return typeof n === 'number' && isFinite(n) ? n : 0;
 }
 

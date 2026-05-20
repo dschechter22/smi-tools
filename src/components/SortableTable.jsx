@@ -107,6 +107,7 @@ export default function SortableTable({
   exportFilename = 'export.csv',
   showExport = true,
   emptyMessage = 'No data available.',
+  onRowClick,
 }) {
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -357,7 +358,11 @@ export default function SortableTable({
             </thead>
             <tbody>
               {pageRows.map((row, i) => (
-                <tr key={i}>
+                <tr
+                  key={i}
+                  className={onRowClick ? 'clickable-row' : ''}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                >
                   {columns.map((col) => (
                     <td key={col.key} className={col.cellClass || ''} style={col.cellStyle}>
                       {col.render ? col.render(row) : row[col.key] ?? '—'}
