@@ -7,11 +7,16 @@ const STRING_COLS = [
   'CPTCode', 'FirstDenialGroup', 'FirstDenialCode', 'LastDenialGroup',
   'LastDenialCode', 'ChgStatus',
 ];
+const ALL_EXPECTED = [...NUMERIC_COLS, ...STRING_COLS];
+
+function stripBOM(str) {
+  return str.charCodeAt(0) === 0xFEFF ? str.slice(1) : str;
+}
 
 function normalizeRow(raw) {
   const row = {};
   for (const key of Object.keys(raw)) {
-    const trimKey = key.trim();
+    const trimKey = stripBOM(key.trim());
     const val = raw[key];
     if (NUMERIC_COLS.includes(trimKey)) {
       const str = (val == null ? '' : String(val)).trim().replace(/[$,]/g, '');
@@ -52,32 +57,69 @@ function buildColumnMeta(rows) {
   return meta;
 }
 
+function validateColumns(rows) {
+  if (rows.length === 0) return;
+  const found = Object.keys(rows[0]).map(k => stripBOM(k.trim()));
+  const missing = ALL_EXPECTED.filter(c => !found.includes(c));
+  if (missing.length === ALL_EXPECTED.length) {
+    throw new Error(
+      `No expected columns found. Detected columns: ${found.slice(0, 8).join(', ')}${found.length > 8 ? '…' : ''}. ` +
+      `Expected columns include: ${ALL_EXPECTED.slice(0, 5).join(', ')}…`
+    );
+  }
+  if (missing.length > 0) {
+    console.warn('Missing columns (will default to empty/0):', missing.join(', '));
+  }
+}
+
 function sheetToRows(sheet) {
-  const raw = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-  return raw;
+  return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+}
+
+function findDataSheet(wb) {
+  for (const name of wb.SheetNames) {
+    const rows = sheetToRows(wb.Sheets[name]);
+    if (rows.length > 0) return rows;
+  }
+  return [];
 }
 
 export async function parseFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
 
   let rawRows;
-  if (ext === 'csv') {
+  if (ext === 'csv' || ext === 'txt' || ext === 'tsv') {
     rawRows = await new Promise((resolve, reject) => {
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (result) => resolve(result.data),
+        delimiter: '',        // auto-detect: handles comma, tab, pipe, etc.
+        encoding: 'UTF-8',
+        complete: (result) => {
+          if (result.errors.length > 0 && result.data.length === 0) {
+            reject(new Error(`CSV parse error: ${result.errors[0].message}`));
+          } else {
+            resolve(result.data);
+          }
+        },
         error: (err) => reject(err),
       });
     });
   } else if (ext === 'xlsx' || ext === 'xls') {
     const buffer = await file.arrayBuffer();
     const wb = XLSX.read(buffer, { type: 'array' });
-    const sheetName = wb.SheetNames[0];
-    rawRows = sheetToRows(wb.Sheets[sheetName]);
+    rawRows = findDataSheet(wb);
   } else {
-    throw new Error(`Unsupported file type: .${ext}. Please upload a .csv, .xlsx, or .xls file.`);
+    throw new Error(
+      `Unsupported file type: .${ext}. Please upload a .csv, .xlsx, .xls, or .txt file.`
+    );
   }
+
+  if (rawRows.length === 0) {
+    throw new Error('The file appears to be empty or has no data rows.');
+  }
+
+  validateColumns(rawRows);
 
   const rows = rawRows.map(normalizeRow);
   const columnMeta = buildColumnMeta(rows);
