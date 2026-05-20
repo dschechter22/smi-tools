@@ -65,9 +65,7 @@ export default function DenialAnalysisTab({ filteredData }) {
 
   const totalChgAmt = useMemo(() => denialStats.reduce((s, p) => s + p.totalChgAmt, 0), [denialStats]);
   const totalDeniedAmt = useMemo(() => denialStats.reduce((s, p) => s + p.deniedChgAmt, 0), [denialStats]);
-  const totalChgCt = useMemo(() => denialStats.reduce((s, p) => s + p.totalChgCt, 0), [denialStats]);
-  const totalDeniedCt = useMemo(() => denialStats.reduce((s, p) => s + p.deniedChgCt, 0), [denialStats]);
-  const totalRedeniedCt = useMemo(() => denialStats.reduce((s, p) => s + p.redeniedChgCt, 0), [denialStats]);
+  const totalRedeniedAmt = useMemo(() => denialStats.reduce((s, p) => s + p.redeniedChgAmt, 0), [denialStats]);
 
   const payerColumns = [
     { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
@@ -82,15 +80,6 @@ export default function DenialAnalysisTab({ filteredData }) {
       csvValue: (r) => r.totalChgAmt?.toFixed(2),
     },
     {
-      key: 'totalChgCt',
-      label: 'Total Claims',
-      sortable: true,
-      filterType: 'number',
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => r.totalChgCt.toLocaleString(),
-    },
-    {
       key: 'deniedChgAmt',
       label: 'Denied $',
       sortable: true,
@@ -99,15 +88,6 @@ export default function DenialAnalysisTab({ filteredData }) {
       headerClass: 'text-right',
       render: (r) => <span style={{ color: r.deniedChgAmt > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.deniedChgAmt)}</span>,
       csvValue: (r) => r.deniedChgAmt?.toFixed(2),
-    },
-    {
-      key: 'deniedChgCt',
-      label: 'Denied Claims',
-      sortable: true,
-      filterType: 'number',
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => r.deniedChgCt.toLocaleString(),
     },
     {
       key: 'denialRateDollar',
@@ -121,19 +101,6 @@ export default function DenialAnalysisTab({ filteredData }) {
         return <span className={cls}>{fmtPct(r.denialRateDollar)}</span>;
       },
       csvValue: (r) => r.denialRateDollar.toFixed(2) + '%',
-    },
-    {
-      key: 'denialRateCount',
-      label: 'Denial Rate (claims)',
-      sortable: true,
-      filterType: 'number',
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => {
-        const cls = r.denialRateCount < 5 ? 'rate-green' : r.denialRateCount < 15 ? 'rate-yellow' : r.denialRateCount < 30 ? 'rate-orange' : 'rate-red';
-        return <span className={cls}>{fmtPct(r.denialRateCount)}</span>;
-      },
-      csvValue: (r) => r.denialRateCount.toFixed(2) + '%',
     },
     {
       key: 'redenialRateDollar',
@@ -178,19 +145,9 @@ export default function DenialAnalysisTab({ filteredData }) {
           <div className="si-value">{fmt$(totalChgAmt)}</div>
         </div>
         <div className="summary-item">
-          <div className="si-label">Total Claims</div>
-          <div className="si-value">{totalChgCt.toLocaleString()}</div>
-        </div>
-        <div className="summary-item">
           <div className="si-label">Denied $ Amount</div>
           <div className="si-value" style={{ color: totalDeniedAmt > 0 ? 'var(--danger)' : 'var(--success)' }}>
             {fmt$(totalDeniedAmt)}
-          </div>
-        </div>
-        <div className="summary-item">
-          <div className="si-label">Denied Claims</div>
-          <div className="si-value" style={{ color: totalDeniedCt > 0 ? 'var(--danger)' : 'var(--success)' }}>
-            {totalDeniedCt.toLocaleString()}
           </div>
         </div>
         <div className="summary-item">
@@ -200,9 +157,9 @@ export default function DenialAnalysisTab({ filteredData }) {
           </div>
         </div>
         <div className="summary-item">
-          <div className="si-label">Re-denied Claims</div>
-          <div className="si-value" style={{ color: totalRedeniedCt > 0 ? 'var(--orange)' : 'var(--success)' }}>
-            {totalRedeniedCt.toLocaleString()}
+          <div className="si-label">Re-denied $ Amount</div>
+          <div className="si-value" style={{ color: totalRedeniedAmt > 0 ? 'var(--orange)' : 'var(--success)' }}>
+            {fmt$(totalRedeniedAmt)}
           </div>
         </div>
         <div className="summary-item">
@@ -278,7 +235,6 @@ export default function DenialAnalysisTab({ filteredData }) {
                   <th>#</th>
                   <th>Denial Code</th>
                   <th className="text-right">Denied $</th>
-                  <th className="text-right">Denied Claims</th>
                   <th className="text-right">% of Total Charged</th>
                 </tr>
               </thead>
@@ -288,7 +244,6 @@ export default function DenialAnalysisTab({ filteredData }) {
                     <td style={{ color: 'var(--text-muted)', width: 36 }}>{i + 1}</td>
                     <td><strong>{c.code}</strong></td>
                     <td className="td-mono text-right">{fmt$(c.chgAmt)}</td>
-                    <td className="td-mono text-right">{c.chgCt.toLocaleString()}</td>
                     <td className="td-mono text-right">
                       <span className={c.pctOfTotal > 10 ? 'rate-red' : c.pctOfTotal > 5 ? 'rate-orange' : 'rate-yellow'}>
                         {fmtPct(c.pctOfTotal)}

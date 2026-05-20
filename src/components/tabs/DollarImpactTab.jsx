@@ -131,15 +131,6 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       csvValue: (r) => r.dollarImpact?.toFixed(2),
     },
     {
-      key: 'chgCt',
-      label: 'Charge Volume',
-      sortable: true,
-      filterType: 'number',
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => r.chgCt.toLocaleString(),
-    },
-    {
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
       sortable: true,

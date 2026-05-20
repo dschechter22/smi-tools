@@ -109,15 +109,6 @@ export default function ReDenialTab({ filteredData }) {
       csvValue: (r) => r.pathway,
     },
     {
-      key: 'count',
-      label: 'Claims',
-      sortable: true,
-      filterType: 'number',
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => r.count.toLocaleString(),
-    },
-    {
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
       sortable: true,
@@ -151,7 +142,7 @@ export default function ReDenialTab({ filteredData }) {
   return (
     <div className="section-gap">
       <InfoBox>
-        <strong>Re-denial Tracking</strong> — A re-denial occurs when FirstDenialCode ≠ LastDenialCode, meaning the claim was worked but denied again for a different reason. This pattern usually indicates a workflow or documentation problem rather than a simple coding error. The pathway summary groups by the denial transition (e.g., CO-4 → CO-97) to surface systemic patterns. Claim counts use the ChgCt column.
+        <strong>Re-denial Tracking</strong> — A re-denial occurs when FirstDenialCode ≠ LastDenialCode, meaning the claim was worked but denied again for a different reason. This pattern usually indicates a workflow or documentation problem rather than a simple coding error. The pathway summary groups by the denial transition (e.g., CO-4 → CO-97) to surface systemic patterns. All volumes are measured in charge dollars.
       </InfoBox>
 
       {/* Summary */}

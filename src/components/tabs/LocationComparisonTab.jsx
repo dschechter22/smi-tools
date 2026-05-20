@@ -109,15 +109,6 @@ export default function LocationComparisonTab({ filteredData }) {
       render: (r) => fmt$(r.totalChgAmt),
       csvValue: (r) => r.totalChgAmt?.toFixed(2),
     },
-    {
-      key: 'totalChgCt',
-      label: 'Total Chg Ct',
-      sortable: true,
-      filterType: 'number',
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => r.totalChgCt.toLocaleString(),
-    },
   ];
 
   if (filteredData.length === 0) {
@@ -134,7 +125,7 @@ export default function LocationComparisonTab({ filteredData }) {
   return (
     <div className="section-gap">
       <InfoBox>
-        <strong>Location / State Comparison</strong> — Shows the same payer+CPT combination across multiple states. A large rate variance between states suggests a contract issue at a specific location rather than systemic payer behavior. Only combinations appearing in 2+ states with at least 5 total charges are shown.
+        <strong>Location / State Comparison</strong> — Shows the same payer+CPT combination across multiple states. A large rate variance between states suggests a contract issue at a specific location rather than systemic payer behavior. Only combinations appearing in 2+ states with at least $500 in total charges are shown.
       </InfoBox>
 
       {/* Summary */}

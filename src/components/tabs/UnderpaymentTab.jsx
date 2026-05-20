@@ -69,15 +69,6 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
     { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
     { key: 'payerType', label: 'Payer Type', sortable: true, filterType: 'text' },
     {
-      key: 'chgCt',
-      label: 'Chg Ct',
-      sortable: true,
-      filterType: 'number',
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => r.chgCt.toLocaleString(),
-    },
-    {
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
       sortable: true,

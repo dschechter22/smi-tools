@@ -44,11 +44,10 @@ function InfoBox({ children }) {
 export default function PatientInsuranceSplitTab({ filteredData }) {
   const splitData = useMemo(() => calculatePatientInsuranceSplit(filteredData), [filteredData]);
 
-  // Top 20 payers by charge volume for the stacked bar chart
-  // Sort by chgCt descending for chart
+  // Top 20 payers by charge amount for the stacked bar chart
   const chartData = useMemo(() => {
     return [...splitData]
-      .sort((a, b) => b.chgCt - a.chgCt)
+      .sort((a, b) => b.totalChgAmt - a.totalChgAmt)
       .slice(0, 20)
       .map((p) => ({
         name: p.payer.length > 16 ? p.payer.slice(0, 16) + '…' : p.payer,
@@ -196,7 +195,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
       {chartData.length > 0 && (
         <div className="chart-container">
           <div className="panel-header">
-            <div className="panel-title">Top 20 Payers by Volume — Insurance vs Patient Payments</div>
+            <div className="panel-title">Top 20 Payers by Charge Amount — Insurance vs Patient Payments</div>
           </div>
           <div className="panel-body">
             <ResponsiveContainer width="100%" height={300}>

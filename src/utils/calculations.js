@@ -31,11 +31,10 @@ function fmt(n) {
 }
 
 // ── CPT Benchmarks ────────────────────────────────────────────────────────────
-// Returns {cptCode: rate} — minimum 3 data points required
+// Dollar-weighted: sum(InsPmtAmt) / sum(ChgAmt) per CPT across all payers.
+// Requires at least 3 data rows to be considered reliable.
 
-export function calculateCPTBenchmarks(filteredData, method = 'mean') {
-  // method ignored now — always dollar-weighted (sum InsPmt / sum ChgAmt)
-  // kept for API compatibility
+export function calculateCPTBenchmarks(filteredData) {
   const byCode = {};
   for (const row of filteredData) {
     if (!row.ChgAmt || row.ChgAmt === 0) continue;
@@ -54,9 +53,9 @@ export function calculateCPTBenchmarks(filteredData, method = 'mean') {
 }
 
 // ── Underpayment Stats ────────────────────────────────────────────────────────
+// All rates are dollar-weighted: sum(InsPmtAmt) / sum(ChgAmt) per payer+CPT.
 
 export function calculateUnderpaymentStats(filteredData, benchmarks, method = 'mean', threshold = 15) {
-  // Group by Payer + CPT
   const groups = {};
   for (const row of filteredData) {
     const key = `${row.PrimIns}|||${row.CPTCode}`;
@@ -67,14 +66,12 @@ export function calculateUnderpaymentStats(filteredData, benchmarks, method = 'm
         payerType: row.PrimInsType || '',
         totalChgAmt: 0,
         totalInsPmtAmt: 0,
-        chgCt: 0,
         rowCount: 0,
       };
     }
     const g = groups[key];
     g.totalChgAmt += fmt(row.ChgAmt);
     g.totalInsPmtAmt += fmt(row.InsPmtAmt);
-    g.chgCt += fmt(row.ChgCt) || 1;
     g.rowCount += 1;
   }
 
@@ -83,11 +80,8 @@ export function calculateUnderpaymentStats(filteredData, benchmarks, method = 'm
 
   for (const g of Object.values(groups)) {
     if (g.totalChgAmt === 0) continue;
-    const cpt = g.cpt;
-    const benchmark = benchmarks[cpt];
-
-    // Dollar-weighted rate: sum InsPmt / sum ChgAmt (ignore method param — always correct for aggregated data)
-    const payerRate = g.totalChgAmt > 0 ? g.totalInsPmtAmt / g.totalChgAmt : 0;
+    const benchmark = benchmarks[g.cpt];
+    const payerRate = g.totalInsPmtAmt / g.totalChgAmt;
     const benchmarkVal = benchmark !== undefined ? benchmark : null;
 
     let gapPct = null;
@@ -97,8 +91,7 @@ export function calculateUnderpaymentStats(filteredData, benchmarks, method = 'm
     if (benchmarkVal !== null) {
       gapPct = benchmarkVal > 0 ? ((payerRate - benchmarkVal) / benchmarkVal) * 100 : null;
       if (benchmarkVal > payerRate) {
-        const underpaymentGap = benchmarkVal - payerRate;
-        dollarImpact = underpaymentGap * g.totalChgAmt;
+        dollarImpact = (benchmarkVal - payerRate) * g.totalChgAmt;
         flag = (benchmarkVal - payerRate) / benchmarkVal >= threshFraction;
       }
     }
@@ -107,7 +100,6 @@ export function calculateUnderpaymentStats(filteredData, benchmarks, method = 'm
       payer: g.payer,
       cpt: g.cpt,
       payerType: g.payerType,
-      chgCt: g.chgCt,
       totalChgAmt: g.totalChgAmt,
       payerRate,
       benchmark: benchmarkVal,
@@ -122,6 +114,7 @@ export function calculateUnderpaymentStats(filteredData, benchmarks, method = 'm
 }
 
 // ── Denial Stats ──────────────────────────────────────────────────────────────
+// Denial rate = denied ChgAmt / total ChgAmt (dollar-based only).
 
 export function calculatePayerDenialStats(filteredData) {
   const payerMap = {};
@@ -131,26 +124,20 @@ export function calculatePayerDenialStats(filteredData) {
       payerMap[payer] = {
         payer,
         totalChgAmt: 0,
-        totalChgCt: 0,
         deniedChgAmt: 0,
-        deniedChgCt: 0,
         redeniedChgAmt: 0,
-        redeniedChgCt: 0,
         codes: {},
       };
     }
     const p = payerMap[payer];
     p.totalChgAmt += fmt(row.ChgAmt);
-    p.totalChgCt += fmt(row.ChgCt) || 1;
 
     if (isDenialCode(row.FirstDenialCode)) {
       p.deniedChgAmt += fmt(row.ChgAmt);
-      p.deniedChgCt += fmt(row.ChgCt) || 1;
       const code = row.FirstDenialCode.trim();
-      p.codes[code] = (p.codes[code] || 0) + (fmt(row.ChgCt) || 1);
+      p.codes[code] = (p.codes[code] || 0) + fmt(row.ChgAmt);
       if (isDenialCode(row.LastDenialCode) && row.LastDenialCode.trim() !== row.FirstDenialCode.trim()) {
         p.redeniedChgAmt += fmt(row.ChgAmt);
-        p.redeniedChgCt += fmt(row.ChgCt) || 1;
       }
     }
   }
@@ -158,17 +145,13 @@ export function calculatePayerDenialStats(filteredData) {
     .map((p) => {
       const top3 = Object.entries(p.codes)
         .sort((a, b) => b[1] - a[1]).slice(0, 3)
-        .map(([code, cnt]) => `${code} (${cnt})`).join(', ');
+        .map(([code]) => code).join(', ');
       return {
         payer: p.payer,
         totalChgAmt: p.totalChgAmt,
-        totalChgCt: p.totalChgCt,
         deniedChgAmt: p.deniedChgAmt,
-        deniedChgCt: p.deniedChgCt,
         denialRateDollar: p.totalChgAmt > 0 ? (p.deniedChgAmt / p.totalChgAmt) * 100 : 0,
-        denialRateCount: p.totalChgCt > 0 ? (p.deniedChgCt / p.totalChgCt) * 100 : 0,
         redeniedChgAmt: p.redeniedChgAmt,
-        redeniedChgCt: p.redeniedChgCt,
         redenialRateDollar: p.deniedChgAmt > 0 ? (p.redeniedChgAmt / p.deniedChgAmt) * 100 : 0,
         top3Codes: top3 || '—',
       };
@@ -178,36 +161,33 @@ export function calculatePayerDenialStats(filteredData) {
 
 export function calculateTopDenialCodes(filteredData) {
   const totalChgAmt = filteredData.reduce((s, r) => s + fmt(r.ChgAmt), 0);
-  const codeCounts = {};
+  const codeAmts = {};
   for (const row of filteredData) {
     if (!isDenialCode(row.FirstDenialCode)) continue;
     const code = row.FirstDenialCode.trim();
-    if (!codeCounts[code]) codeCounts[code] = { chgAmt: 0, chgCt: 0 };
-    codeCounts[code].chgAmt += fmt(row.ChgAmt);
-    codeCounts[code].chgCt += fmt(row.ChgCt) || 1;
+    codeAmts[code] = (codeAmts[code] || 0) + fmt(row.ChgAmt);
   }
-  return Object.entries(codeCounts)
-    .sort((a, b) => b[1].chgAmt - a[1].chgAmt)
+  return Object.entries(codeAmts)
+    .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
-    .map(([code, data]) => ({
+    .map(([code, chgAmt]) => ({
       code,
-      chgAmt: data.chgAmt,
-      chgCt: data.chgCt,
-      pctOfTotal: totalChgAmt > 0 ? (data.chgAmt / totalChgAmt) * 100 : 0,
+      chgAmt,
+      pctOfTotal: totalChgAmt > 0 ? (chgAmt / totalChgAmt) * 100 : 0,
     }));
 }
 
 // ── Re-denial ─────────────────────────────────────────────────────────────────
-// Re-denial = FirstDenialCode ≠ LastDenialCode AND both non-empty
+// Re-denial = FirstDenialCode ≠ LastDenialCode AND both non-empty.
+// Pathway volumes measured in dollars (ChgAmt).
 
 export function calculateReDenials(filteredData) {
-  const rows = filteredData.filter((row) => {
-    return isDenialCode(row.FirstDenialCode) &&
-           isDenialCode(row.LastDenialCode) &&
-           row.FirstDenialCode.trim() !== row.LastDenialCode.trim();
-  });
+  const rows = filteredData.filter((row) =>
+    isDenialCode(row.FirstDenialCode) &&
+    isDenialCode(row.LastDenialCode) &&
+    row.FirstDenialCode.trim() !== row.LastDenialCode.trim()
+  );
 
-  // Pathway summary: FirstDenialCode → LastDenialCode
   const pathways = {};
   for (const row of rows) {
     const key = `${row.FirstDenialCode.trim()} → ${row.LastDenialCode.trim()}`;
@@ -218,70 +198,53 @@ export function calculateReDenials(filteredData) {
         firstGroup: row.FirstDenialGroup || '',
         lastCode: row.LastDenialCode.trim(),
         lastGroup: row.LastDenialGroup || '',
-        count: 0,
-        rowCount: 0,
-        totalBalance: 0,
         totalChgAmt: 0,
+        totalBalance: 0,
       };
     }
-    pathways[key].count += fmt(row.ChgCt) || 1;
-    pathways[key].rowCount += 1;
-    pathways[key].totalBalance += fmt(row.Balance);
     pathways[key].totalChgAmt += fmt(row.ChgAmt);
+    pathways[key].totalBalance += fmt(row.Balance);
   }
 
-  const pathwayList = Object.values(pathways).sort((a, b) => b.count - a.count);
-
+  const pathwayList = Object.values(pathways).sort((a, b) => b.totalChgAmt - a.totalChgAmt);
   const totalExposure = rows.reduce((s, r) => s + fmt(r.Balance), 0);
+  const totalChgAmt = rows.reduce((s, r) => s + fmt(r.ChgAmt), 0);
 
-  return { rows, pathways: pathwayList, totalCount: rows.length, totalExposure };
+  return { rows, pathways: pathwayList, totalCount: rows.length, totalExposure, totalChgAmt };
 }
 
 // ── Location Comparison ───────────────────────────────────────────────────────
+// Dollar-weighted payment rate per payer+CPT+state; threshold uses ChgAmt.
 
 export function calculateLocationComparison(filteredData) {
-  // Group by Payer + CPT + State
   const groups = {};
   for (const row of filteredData) {
     const key = `${row.PrimIns}|||${row.CPTCode}`;
     if (!groups[key]) {
-      groups[key] = {
-        payer: row.PrimIns || '',
-        cpt: row.CPTCode || '',
-        states: {},
-        totalChgAmt: 0,
-        totalChgCt: 0,
-      };
+      groups[key] = { payer: row.PrimIns || '', cpt: row.CPTCode || '', states: {}, totalChgAmt: 0 };
     }
     const g = groups[key];
     const state = row.Location_State || '(Unknown)';
-    if (!g.states[state]) g.states[state] = { rates: [], chgAmt: 0, chgCt: 0 };
-    const rate = getPaymentRate(row);
-    if (rate !== null) g.states[state].rates.push(rate);
-    g.states[state].chgAmt += fmt(row.ChgAmt);
-    g.states[state].chgCt += fmt(row.ChgCt) || 1;
+    if (!g.states[state]) g.states[state] = { totalIns: 0, totalChg: 0 };
+    g.states[state].totalIns += fmt(row.InsPmtAmt);
+    g.states[state].totalChg += fmt(row.ChgAmt);
     g.totalChgAmt += fmt(row.ChgAmt);
-    g.totalChgCt += fmt(row.ChgCt) || 1;
   }
 
   const results = [];
   for (const g of Object.values(groups)) {
     const stateEntries = Object.entries(g.states);
-    // Only show combos in 2+ states with at least 5 total charges
-    if (stateEntries.length < 2 || g.totalChgCt < 5) continue;
+    if (stateEntries.length < 2 || g.totalChgAmt < 500) continue;
 
     const stateRates = {};
-    for (const [state, data] of stateEntries) {
-      if (data.rates.length > 0) {
-        stateRates[state] = mean(data.rates);
-      }
+    for (const [state, d] of stateEntries) {
+      if (d.totalChg > 0) stateRates[state] = d.totalIns / d.totalChg;
     }
-    const rateValues = Object.values(stateRates).filter((r) => r !== null);
+    const rateValues = Object.values(stateRates);
     if (rateValues.length < 2) continue;
 
     const minRate = Math.min(...rateValues);
     const maxRate = Math.max(...rateValues);
-    const variance = maxRate - minRate;
 
     results.push({
       payer: g.payer,
@@ -290,9 +253,8 @@ export function calculateLocationComparison(filteredData) {
       stateCount: stateEntries.length,
       minRate,
       maxRate,
-      variance,
+      variance: maxRate - minRate,
       totalChgAmt: g.totalChgAmt,
-      totalChgCt: g.totalChgCt,
     });
   }
 
@@ -300,45 +262,34 @@ export function calculateLocationComparison(filteredData) {
 }
 
 // ── Patient / Insurance Split ─────────────────────────────────────────────────
+// All dollar-based. % of collected payments from ins vs patient.
 
 export function calculatePatientInsuranceSplit(filteredData) {
   const payerMap = {};
   for (const row of filteredData) {
     const payer = row.PrimIns || '(Unknown)';
     if (!payerMap[payer]) {
-      payerMap[payer] = {
-        payer,
-        totalChgAmt: 0,
-        totalInsPmt: 0,
-        totalPtPmt: 0,
-        totalBalance: 0,
-        chgCt: 0,
-      };
+      payerMap[payer] = { payer, totalChgAmt: 0, totalInsPmt: 0, totalPtPmt: 0, totalBalance: 0 };
     }
     const p = payerMap[payer];
     p.totalChgAmt += fmt(row.ChgAmt);
     p.totalInsPmt += fmt(row.InsPmtAmt);
     p.totalPtPmt += fmt(row.PtPmtAmt);
     p.totalBalance += fmt(row.Balance);
-    p.chgCt += fmt(row.ChgCt) || 1;
   }
 
   return Object.values(payerMap)
     .map((p) => {
       const totalPmt = p.totalInsPmt + p.totalPtPmt;
-      const insPct = totalPmt > 0 ? (p.totalInsPmt / totalPmt) * 100 : 0;
-      const ptPct = totalPmt > 0 ? (p.totalPtPmt / totalPmt) * 100 : 0;
-      const impliedWriteoffs = p.totalChgAmt - p.totalInsPmt - p.totalPtPmt - p.totalBalance;
       return {
         payer: p.payer,
         totalChgAmt: p.totalChgAmt,
         totalInsPmt: p.totalInsPmt,
         totalPtPmt: p.totalPtPmt,
         totalBalance: p.totalBalance,
-        insPct,
-        ptPct,
-        impliedWriteoffs,
-        chgCt: p.chgCt,
+        insPct: totalPmt > 0 ? (p.totalInsPmt / totalPmt) * 100 : 0,
+        ptPct: totalPmt > 0 ? (p.totalPtPmt / totalPmt) * 100 : 0,
+        impliedWriteoffs: p.totalChgAmt - p.totalInsPmt - p.totalPtPmt - p.totalBalance,
       };
     })
     .sort((a, b) => b.ptPct - a.ptPct);
@@ -353,8 +304,6 @@ export function calculateOverviewStats(filteredData) {
   let totalBalance = 0;
   let totalPmtAmt = 0;
   let totalDeniedChgAmt = 0;
-  let totalDeniedChgCt = 0;
-  let totalChgCtAll = 0;
   const payers = new Set();
   const cpts = new Set();
 
@@ -364,45 +313,36 @@ export function calculateOverviewStats(filteredData) {
     totalPtPmt += fmt(row.PtPmtAmt);
     totalBalance += fmt(row.Balance);
     totalPmtAmt += fmt(row.PmtAmt);
-    totalChgCtAll += fmt(row.ChgCt) || 1;
     if (row.PrimIns) payers.add(row.PrimIns);
     if (row.CPTCode) cpts.add(row.CPTCode);
-    if (isDenialCode(row.FirstDenialCode)) {
-      totalDeniedChgAmt += fmt(row.ChgAmt);
-      totalDeniedChgCt += fmt(row.ChgCt) || 1;
-    }
+    if (isDenialCode(row.FirstDenialCode)) totalDeniedChgAmt += fmt(row.ChgAmt);
   }
 
-  const overallPaymentRate = totalChgAmt > 0 ? totalInsPmt / totalChgAmt : 0;
-  const impliedWriteoffs = totalChgAmt - totalInsPmt - totalPtPmt - totalBalance;
-
-  // ChgStatus breakdown
-  const statusCounts = {};
+  // ChgStatus breakdown by ChgAmt
+  const statusAmts = {};
   for (const row of filteredData) {
     const s = row.ChgStatus || '(Unknown)';
-    statusCounts[s] = (statusCounts[s] || 0) + 1;
+    statusAmts[s] = (statusAmts[s] || 0) + fmt(row.ChgAmt);
   }
 
-  // PrimInsType breakdown
-  const insTypeCounts = {};
+  // PrimInsType breakdown by ChgAmt
+  const insTypeAmts = {};
   for (const row of filteredData) {
     const t = row.PrimInsType || '(Unknown)';
-    insTypeCounts[t] = (insTypeCounts[t] || 0) + 1;
+    insTypeAmts[t] = (insTypeAmts[t] || 0) + fmt(row.ChgAmt);
   }
 
-  // Top 5 payers by dollar left on table (balance)
+  // Top 5 payers by outstanding balance
   const payerBalance = {};
   for (const row of filteredData) {
     const p = row.PrimIns || '(Unknown)';
-    if (!payerBalance[p]) payerBalance[p] = 0;
-    payerBalance[p] += fmt(row.Balance);
+    payerBalance[p] = (payerBalance[p] || 0) + fmt(row.Balance);
   }
   const top5Payers = Object.entries(payerBalance)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
+    .sort((a, b) => b[1] - a[1]).slice(0, 5)
     .map(([payer, balance]) => ({ payer, balance }));
 
-  // Top 5 denial codes by charge amount
+  // Top 5 denial codes by denied ChgAmt
   const denialCodeAmts = {};
   for (const row of filteredData) {
     if (!isDenialCode(row.FirstDenialCode)) continue;
@@ -419,16 +359,14 @@ export function calculateOverviewStats(filteredData) {
     totalPtPmt,
     totalBalance,
     totalPmtAmt,
-    overallPaymentRate,
-    impliedWriteoffs,
+    overallPaymentRate: totalChgAmt > 0 ? totalInsPmt / totalChgAmt : 0,
+    impliedWriteoffs: totalChgAmt - totalInsPmt - totalPtPmt - totalBalance,
+    denialRateDollar: totalChgAmt > 0 ? (totalDeniedChgAmt / totalChgAmt) * 100 : 0,
     payerCount: payers.size,
     cptCount: cpts.size,
     rowCount: filteredData.length,
-    totalChgCt: totalChgCtAll,
-    denialRateDollar: totalChgAmt > 0 ? (totalDeniedChgAmt / totalChgAmt) * 100 : 0,
-    denialRateCount: totalChgCtAll > 0 ? (totalDeniedChgCt / totalChgCtAll) * 100 : 0,
-    statusCounts,
-    insTypeCounts,
+    statusAmts,
+    insTypeAmts,
     top5Payers,
     top5DenialCodes,
   };

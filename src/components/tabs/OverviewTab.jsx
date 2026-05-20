@@ -77,21 +77,21 @@ export default function OverviewTab({ filteredData }) {
 
   const statusChartData = useMemo(
     () =>
-      Object.entries(stats.statusCounts).map(([name, count]) => ({
+      Object.entries(stats.statusAmts).map(([name, amt]) => ({
         name,
-        Count: count,
+        Amount: amt,
         fill: STATUS_COLORS[name] || '#6b7280',
       })),
-    [stats.statusCounts]
+    [stats.statusAmts]
   );
 
   const insTypeChartData = useMemo(
     () =>
-      Object.entries(stats.insTypeCounts)
+      Object.entries(stats.insTypeAmts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10)
-        .map(([name, count], i) => ({ name, Count: count, fill: INS_TYPE_COLORS[i % INS_TYPE_COLORS.length] })),
-    [stats.insTypeCounts]
+        .map(([name, amt], i) => ({ name, Amount: amt, fill: INS_TYPE_COLORS[i % INS_TYPE_COLORS.length] })),
+    [stats.insTypeAmts]
   );
 
   const top5PayerData = useMemo(
@@ -121,7 +121,7 @@ export default function OverviewTab({ filteredData }) {
 
       {/* Summary Cards */}
       <div className="cards-grid">
-        <StatCard label="Total Charges" value={fmt$(stats.totalChgAmt)} sub={`${stats.rowCount.toLocaleString()} rows · ${stats.totalChgCt.toLocaleString()} claims`} accent="#1e40af" />
+        <StatCard label="Total Charges" value={fmt$(stats.totalChgAmt)} sub={`${stats.rowCount.toLocaleString()} data rows`} accent="#1e40af" />
         <StatCard label="Ins Payments" value={fmt$(stats.totalInsPmt)} sub={`Rate: ${fmtPct(stats.overallPaymentRate)}`} accent="#15803d" />
         <StatCard label="Patient Payments" value={fmt$(stats.totalPtPmt)} accent="#0e7490" />
         <StatCard label="Total Balance" value={fmt$(stats.totalBalance)} accent="#b45309" />
@@ -137,12 +137,6 @@ export default function OverviewTab({ filteredData }) {
           value={`${stats.denialRateDollar.toFixed(1)}%`}
           sub="Denied ChgAmt / Total ChgAmt"
           accent="#b91c1c"
-        />
-        <StatCard
-          label="Denial Rate (by claim)"
-          value={`${stats.denialRateCount.toFixed(1)}%`}
-          sub="Denied ChgCt / Total ChgCt"
-          accent="#dc2626"
         />
         <StatCard label="Unique Payers" value={stats.payerCount.toLocaleString()} accent="#1e40af" />
         <StatCard label="Unique CPT Codes" value={stats.cptCount.toLocaleString()} accent="#1e40af" />
@@ -161,7 +155,7 @@ export default function OverviewTab({ filteredData }) {
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={(v) => v.replace(' / ', '\n/ ')} />
                 <YAxis tick={{ fontSize: 11 }} width={50} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="Count" radius={[3, 3, 0, 0]}>
+                <Bar dataKey="Amount" radius={[3, 3, 0, 0]}>
                   {statusChartData.map((entry, i) => (
                     <Cell key={i} fill={entry.fill} />
                   ))}
