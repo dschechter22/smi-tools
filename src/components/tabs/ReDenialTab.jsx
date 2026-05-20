@@ -141,7 +141,7 @@ export default function ReDenialTab({ filteredData }) {
   return (
     <div className="section-gap">
       <InfoBox>
-        <strong>Re-denial Tracking</strong> — A re-denial occurs when FirstDenialCode ≠ LastDenialCode, meaning the claim was worked but denied again for a different reason. This pattern usually indicates a workflow or documentation problem rather than a simple coding error. The pathway summary groups by the denial transition (e.g., CO-4 → CO-97) to surface systemic patterns. All volumes are measured in charge dollars.
+        <strong>Re-denial Tracking</strong> — Only rows where the <em>first</em> denial code is a true denial are included. A re-denial occurs when FirstDenialCode ≠ LastDenialCode, meaning the claim was worked but denied again. The pathway summary groups by transition (e.g., 503 → 461) to surface systemic patterns. All volumes are measured in charge dollars.
       </InfoBox>
 
       {/* Summary */}

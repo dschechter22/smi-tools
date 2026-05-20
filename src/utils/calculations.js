@@ -7,6 +7,30 @@ function isDenialCode(val) {
   return s !== '' && s !== 'NULL' && s !== 'N/A' && s !== 'NA' && s !== 'NONE' && s !== '0';
 }
 
+// Hard-coded true-denial mapping (from True_Denial_Code.xlsx, Y = true denial).
+// Only these codes count toward denial rates and denial tracking.
+const TRUE_DENIAL_CODES = new Set([
+  '7','8','10','14','15','21','29','32','33','34','38','47','52','53','57','58','61','95',
+  '109','111','113','114','140','147','148','150','152','153','164','165','167','168',
+  '178','180','181','188','199','208','210','220','228','229','230','233','238','239',
+  '254','261','268','269','277','412','416','420','422','424','445','454','460','461',
+  '465','473','475','476','485','491','496','497','499','503','506','510','514','515',
+  '516','518','519','520','523','525','526','527','528','529','533','536','538','540',
+  '543','544','546','547','549','550','551','555','559','560','563','565','567','569',
+  '570','574','580','581','582','584','586','587','591','592','595','598','599','600',
+  '602','603','606','607','608','610','615','619','620','621','623','626','631','632',
+  '633','634','635','638','640','650','652','672','674','688','689','690','691','692',
+  '694','696','699','701','703','707','709','712','722','723','724','725','729','730',
+  '732','737','742','746','749','753','754','756','761','765','772','777','779','781',
+  '783','784','795','796','797','2100',
+]);
+
+// Returns true only if the code is both a valid denial code AND in the true-denial mapping.
+function isTrueDenial(val) {
+  if (!isDenialCode(val)) return false;
+  return TRUE_DENIAL_CODES.has(String(val).trim());
+}
+
 export function median(arr) {
   if (!arr || arr.length === 0) return null;
   const sorted = [...arr].sort((a, b) => a - b);
@@ -132,7 +156,7 @@ export function calculatePayerDenialStats(filteredData) {
     const p = payerMap[payer];
     p.totalChgAmt += fmt(row.ChgAmt);
 
-    if (isDenialCode(row.FirstDenialCode)) {
+    if (isTrueDenial(row.FirstDenialCode)) {
       p.deniedChgAmt += fmt(row.ChgAmt);
       const code = row.FirstDenialCode.trim();
       p.codes[code] = (p.codes[code] || 0) + fmt(row.ChgAmt);
@@ -163,7 +187,7 @@ export function calculateTopDenialCodes(filteredData) {
   const totalChgAmt = filteredData.reduce((s, r) => s + fmt(r.ChgAmt), 0);
   const codeAmts = {};
   for (const row of filteredData) {
-    if (!isDenialCode(row.FirstDenialCode)) continue;
+    if (!isTrueDenial(row.FirstDenialCode)) continue;
     const code = row.FirstDenialCode.trim();
     codeAmts[code] = (codeAmts[code] || 0) + fmt(row.ChgAmt);
   }
@@ -183,7 +207,7 @@ export function calculateTopDenialCodes(filteredData) {
 
 export function calculateReDenials(filteredData) {
   const rows = filteredData.filter((row) =>
-    isDenialCode(row.FirstDenialCode) &&
+    isTrueDenial(row.FirstDenialCode) &&
     isDenialCode(row.LastDenialCode) &&
     row.FirstDenialCode.trim() !== row.LastDenialCode.trim()
   );
@@ -315,7 +339,7 @@ export function calculateOverviewStats(filteredData) {
     totalPmtAmt += fmt(row.PmtAmt);
     if (row.PrimIns) payers.add(row.PrimIns);
     if (row.CPTCode) cpts.add(row.CPTCode);
-    if (isDenialCode(row.FirstDenialCode)) totalDeniedChgAmt += fmt(row.ChgAmt);
+    if (isTrueDenial(row.FirstDenialCode)) totalDeniedChgAmt += fmt(row.ChgAmt);
   }
 
   // ChgStatus breakdown by ChgAmt
@@ -345,7 +369,7 @@ export function calculateOverviewStats(filteredData) {
   // Top 5 denial codes by denied ChgAmt
   const denialCodeAmts = {};
   for (const row of filteredData) {
-    if (!isDenialCode(row.FirstDenialCode)) continue;
+    if (!isTrueDenial(row.FirstDenialCode)) continue;
     const c = row.FirstDenialCode.trim();
     denialCodeAmts[c] = (denialCodeAmts[c] || 0) + fmt(row.ChgAmt);
   }

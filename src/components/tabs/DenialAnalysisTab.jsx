@@ -125,7 +125,7 @@ export default function DenialAnalysisTab({ filteredData }) {
   return (
     <div className="section-gap">
       <InfoBox>
-        <strong>Denial Analysis</strong> — Rates are calculated using charge dollars and claim counts (from the ChgCt column), not row counts. Each row in the source data may represent many claims with the same attributes. A payer with a 30% denial rate by dollars has 30 cents of every dollar charged being denied — a materially different problem than a payer with a high denial rate on low-dollar codes.
+        <strong>Denial Analysis</strong> — Only <strong>true denials</strong> (178 mapped codes) are counted toward denial rates and dollar amounts. Non-denial adjustments (e.g. contractual, informational) are excluded. Rates use charge dollars — a 30% denial rate means 30 cents of every dollar charged was truly denied.
       </InfoBox>
 
       {/* Summary */}
