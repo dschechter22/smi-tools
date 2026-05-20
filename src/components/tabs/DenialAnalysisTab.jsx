@@ -125,7 +125,7 @@ export default function DenialAnalysisTab({ filteredData }) {
   return (
     <div className="section-gap">
       <InfoBox>
-        <strong>Denial Analysis</strong> — Only <strong>true denials</strong> (178 mapped codes) are counted toward denial rates and dollar amounts. Non-denial adjustments (e.g. contractual, informational) are excluded. Rates use charge dollars — a 30% denial rate means 30 cents of every dollar charged was truly denied.
+        <strong>Denial Analysis</strong> — Only <strong>true denials</strong> (1,028 mapped codes) are counted toward denial rates and dollar amounts. Non-denial adjustments (e.g. contractual, informational) are excluded. Rates use charge dollars — a 30% denial rate means 30 cents of every dollar charged was truly denied.
       </InfoBox>
 
       {/* Summary */}
