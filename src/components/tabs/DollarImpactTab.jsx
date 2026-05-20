@@ -24,6 +24,23 @@ function fmtPct(n) {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+function InfoBox({ children }) {
+  return (
+    <div style={{
+      background: '#e6f2fa',
+      border: '1px solid #a8d4ed',
+      borderLeft: '4px solid #0073bb',
+      borderRadius: 6,
+      padding: '12px 16px',
+      fontSize: 13,
+      color: '#16191f',
+      lineHeight: 1.6,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 const IMPACT_COLORS = [
   '#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444',
   '#f97316', '#fb923c', '#fbbf24', '#f59e0b', '#d97706',
@@ -64,12 +81,13 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
   );
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true },
-    { key: 'cpt', label: 'CPT', sortable: true },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
+    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
     {
       key: 'benchmark',
-      label: `Benchmark (${benchmarkMethod})`,
+      label: `Benchmark (dollar-weighted)`,
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => r.benchmark == null ? <span className="insuf-data">Insuf. data</span> : fmtPct(r.benchmark),
@@ -79,6 +97,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       key: 'payerRate',
       label: 'Payer Rate',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => fmtPct(r.payerRate),
@@ -88,6 +107,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       key: 'gapPct',
       label: 'Underpayment %',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => {
@@ -102,6 +122,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       key: 'dollarImpact',
       label: 'Dollar Impact',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => (
@@ -113,6 +134,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       key: 'chgCt',
       label: 'Charge Volume',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => r.chgCt.toLocaleString(),
@@ -121,6 +143,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => fmt$(r.totalChgAmt),
@@ -139,6 +162,10 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
 
   return (
     <div className="section-gap">
+      <InfoBox>
+        <strong>Dollar Impact Ranking</strong> — Shows the estimated revenue left on the table, calculated as: (benchmark rate − payer rate) × total charges for that combination. This prioritizes where to focus — a payer 10% under benchmark on a high-volume code generates more recoverable revenue than a payer 40% under on a rarely-billed code. Only combinations with a positive dollar impact are shown.
+      </InfoBox>
+
       {/* Summary */}
       <div className="summary-row">
         <div className="summary-item">
@@ -154,7 +181,7 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
         <div className="summary-item">
           <div className="si-label">Benchmark Method</div>
           <div className="si-value" style={{ textTransform: 'capitalize', fontFamily: 'var(--font)' }}>
-            {benchmarkMethod}
+            Dollar-weighted
           </div>
         </div>
       </div>

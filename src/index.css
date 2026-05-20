@@ -845,3 +845,69 @@ tbody tr:nth-child(even):hover td { background: #f0f4f8; }
 }
 
 .recharts-tooltip-wrapper { font-size: 13px; }
+
+/* Column filter row */
+.col-filter-row th {
+  padding: 4px 8px;
+  background: #f8f9fa;
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+}
+
+.col-filter-input {
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  outline: none;
+  background: var(--card);
+  color: var(--text);
+}
+.col-filter-input:focus { border-color: var(--primary); }
+
+.col-filter-number {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.col-filter-number span {
+  font-size: 11px;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+.col-filter-number input {
+  width: 62px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  outline: none;
+  background: var(--card);
+}
+.col-filter-number input:focus { border-color: var(--primary); }
+
+.col-filter-clear-btn {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.col-filter-clear-btn:hover { color: var(--danger); }
+
+.table-filter-active-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.table-filter-active-note button {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: underline;
+  padding: 0;
+}

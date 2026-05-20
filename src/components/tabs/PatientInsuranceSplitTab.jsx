@@ -24,6 +24,23 @@ function fmtPct(n) {
   return `${n.toFixed(1)}%`;
 }
 
+function InfoBox({ children }) {
+  return (
+    <div style={{
+      background: '#e6f2fa',
+      border: '1px solid #a8d4ed',
+      borderLeft: '4px solid #0073bb',
+      borderRadius: 6,
+      padding: '12px 16px',
+      fontSize: 13,
+      color: '#16191f',
+      lineHeight: 1.6,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 export default function PatientInsuranceSplitTab({ filteredData }) {
   const splitData = useMemo(() => calculatePatientInsuranceSplit(filteredData), [filteredData]);
 
@@ -52,11 +69,12 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
   }, [totalInsPmt, totalPtPmt]);
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
     {
       key: 'totalChgAmt',
       label: 'Total Charges',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => fmt$(r.totalChgAmt),
@@ -66,6 +84,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
       key: 'totalInsPmt',
       label: 'Ins Payment',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => <span style={{ color: 'var(--primary)' }}>{fmt$(r.totalInsPmt)}</span>,
@@ -75,6 +94,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
       key: 'totalPtPmt',
       label: 'Pt Payment',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => <span style={{ color: 'var(--orange)' }}>{fmt$(r.totalPtPmt)}</span>,
@@ -84,6 +104,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
       key: 'totalBalance',
       label: 'Balance',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => <span style={{ color: r.totalBalance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.totalBalance)}</span>,
@@ -93,6 +114,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
       key: 'insPct',
       label: 'Ins %',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => <span className="rate-green">{fmtPct(r.insPct)}</span>,
@@ -102,6 +124,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
       key: 'ptPct',
       label: 'Pt %',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => {
@@ -114,6 +137,7 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
       key: 'impliedWriteoffs',
       label: 'Implied Write-offs',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => (
@@ -136,14 +160,9 @@ export default function PatientInsuranceSplitTab({ filteredData }) {
 
   return (
     <div className="section-gap">
-      {/* Explanation */}
-      <div className="panel">
-        <div className="panel-body">
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            <strong style={{ color: 'var(--text)' }}>Patient responsibility ratio</strong> = PtPmtAmt / (InsPmtAmt + PtPmtAmt) per payer. A high patient percentage may indicate cost-shifting or underpayment by the insurer. Table is sorted by patient % descending.
-          </p>
-        </div>
-      </div>
+      <InfoBox>
+        <strong>Patient vs. Insurance Split</strong> — Shows what portion of collected payments came from the patient vs. insurance, by payer. A high patient % may indicate cost-shifting (insurance underpaying and the balance being billed to the patient) or high-deductible plan behavior. Implied write-offs = Charges − Insurance Payment − Patient Payment − Balance.
+      </InfoBox>
 
       {/* Summary */}
       <div className="summary-row">

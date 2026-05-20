@@ -34,6 +34,23 @@ function getRateBadgeClass(payerRate, benchmark) {
   return 'badge-red';
 }
 
+function InfoBox({ children }) {
+  return (
+    <div style={{
+      background: '#e6f2fa',
+      border: '1px solid #a8d4ed',
+      borderLeft: '4px solid #0073bb',
+      borderRadius: 6,
+      padding: '12px 16px',
+      fontSize: 13,
+      color: '#16191f',
+      lineHeight: 1.6,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBenchmarkMethodChange }) {
   const [threshold, setThreshold] = useState(15);
 
@@ -48,13 +65,14 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
   );
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true },
-    { key: 'cpt', label: 'CPT', sortable: true },
-    { key: 'payerType', label: 'Payer Type', sortable: true },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
+    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
+    { key: 'payerType', label: 'Payer Type', sortable: true, filterType: 'text' },
     {
       key: 'chgCt',
       label: 'Chg Ct',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => r.chgCt.toLocaleString(),
@@ -63,6 +81,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => fmt$(r.totalChgAmt),
@@ -72,6 +91,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
       key: 'payerRate',
       label: 'Payer Rate',
       sortable: true,
+      filterType: 'number',
       cellClass: 'text-right',
       headerClass: 'text-right',
       render: (r) => {
@@ -89,8 +109,9 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
     },
     {
       key: 'benchmark',
-      label: `Benchmark (${benchmarkMethod})`,
+      label: `Benchmark (dollar-weighted)`,
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) =>
@@ -105,6 +126,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
       key: 'gapPct',
       label: 'Gap %',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => {
@@ -118,6 +140,7 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
       key: 'dollarImpact',
       label: 'Dollar Impact',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => (
@@ -160,6 +183,10 @@ export default function UnderpaymentTab({ filteredData, benchmarkMethod, onBench
 
   return (
     <div className="section-gap">
+      <InfoBox>
+        <strong>Underpayment Analysis</strong> — Payment rate is calculated as total insurance payments divided by total charges for each payer+CPT combination (dollar-weighted). The benchmark is the overall dollar-weighted rate for that CPT across all payers in the filtered dataset. A gap of -20% means the payer is paying 20 percentage points below what other payers typically pay for that same code.
+      </InfoBox>
+
       {/* Controls */}
       <div className="panel">
         <div className="panel-body" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>

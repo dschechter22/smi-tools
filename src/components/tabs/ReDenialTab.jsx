@@ -9,6 +9,23 @@ function fmt$(n) {
   return `$${n.toFixed(2)}`;
 }
 
+function InfoBox({ children }) {
+  return (
+    <div style={{
+      background: '#e6f2fa',
+      border: '1px solid #a8d4ed',
+      borderLeft: '4px solid #0073bb',
+      borderRadius: 6,
+      padding: '12px 16px',
+      fontSize: 13,
+      color: '#16191f',
+      lineHeight: 1.6,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 export default function ReDenialTab({ filteredData }) {
   const { rows, pathways, totalCount, totalExposure } = useMemo(
     () => calculateReDenials(filteredData),
@@ -79,6 +96,7 @@ export default function ReDenialTab({ filteredData }) {
       key: 'pathway',
       label: 'Denial Pathway (1st → Last)',
       sortable: true,
+      filterType: 'text',
       render: (r) => (
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
           <span className="badge badge-yellow">{r.firstCode}</span>
@@ -92,29 +110,32 @@ export default function ReDenialTab({ filteredData }) {
     },
     {
       key: 'count',
-      label: 'Count',
+      label: 'Claims',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => r.count.toLocaleString(),
     },
     {
-      key: 'totalBalance',
-      label: 'Total Balance',
-      sortable: true,
-      cellClass: 'td-mono text-right',
-      headerClass: 'text-right',
-      render: (r) => <span style={{ color: r.totalBalance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.totalBalance)}</span>,
-      csvValue: (r) => r.totalBalance?.toFixed(2),
-    },
-    {
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => fmt$(r.totalChgAmt),
       csvValue: (r) => r.totalChgAmt?.toFixed(2),
+    },
+    {
+      key: 'totalBalance',
+      label: 'Total Balance',
+      sortable: true,
+      filterType: 'number',
+      cellClass: 'td-mono text-right',
+      headerClass: 'text-right',
+      render: (r) => <span style={{ color: r.totalBalance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.totalBalance)}</span>,
+      csvValue: (r) => r.totalBalance?.toFixed(2),
     },
   ];
 
@@ -129,19 +150,14 @@ export default function ReDenialTab({ filteredData }) {
 
   return (
     <div className="section-gap">
-      {/* Explanation */}
-      <div className="panel">
-        <div className="panel-body">
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            <strong style={{ color: 'var(--text)' }}>Re-denial</strong> occurs when a claim has both a first denial code and a last denial code, and they differ. This indicates the claim was worked (appealed or resubmitted) but denied again for a different reason — often a workflow or documentation problem.
-          </p>
-        </div>
-      </div>
+      <InfoBox>
+        <strong>Re-denial Tracking</strong> — A re-denial occurs when FirstDenialCode ≠ LastDenialCode, meaning the claim was worked but denied again for a different reason. This pattern usually indicates a workflow or documentation problem rather than a simple coding error. The pathway summary groups by the denial transition (e.g., CO-4 → CO-97) to surface systemic patterns. Claim counts use the ChgCt column.
+      </InfoBox>
 
       {/* Summary */}
       <div className="summary-row">
         <div className="summary-item">
-          <div className="si-label">Re-denied Claims</div>
+          <div className="si-label">Re-denied Buckets</div>
           <div className="si-value" style={{ color: totalCount > 0 ? 'var(--danger)' : 'var(--success)' }}>
             {totalCount.toLocaleString()}
           </div>
@@ -157,7 +173,7 @@ export default function ReDenialTab({ filteredData }) {
           <div className="si-value">{pathways.length.toLocaleString()}</div>
         </div>
         <div className="summary-item">
-          <div className="si-label">% of Total Claims</div>
+          <div className="si-label">% of Total Buckets</div>
           <div className="si-value">
             {filteredData.length > 0
               ? `${((totalCount / filteredData.length) * 100).toFixed(1)}%`
@@ -183,19 +199,19 @@ export default function ReDenialTab({ filteredData }) {
         </>
       )}
 
-      {/* Individual Re-denied Claims */}
+      {/* Individual Re-denied Buckets */}
       {rows.length > 0 && (
         <>
           <div className="panel-header" style={{ background: 'var(--card)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', border: '1px solid var(--border)', borderBottom: 'none', padding: '12px 16px' }}>
-            <div className="panel-title">Individual Re-denied Claims</div>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rows.length} claims</span>
+            <div className="panel-title">Individual Re-denied Buckets</div>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rows.length} buckets</span>
           </div>
           <SortableTable
             columns={rowColumns}
             data={rows}
             pageSize={25}
             exportFilename="redenial_claims.csv"
-            emptyMessage="No re-denied claims found."
+            emptyMessage="No re-denied buckets found."
           />
         </>
       )}

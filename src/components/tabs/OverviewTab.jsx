@@ -31,6 +31,23 @@ function fmtPct(n) {
   return n != null ? `${(n * 100).toFixed(1)}%` : '—';
 }
 
+function InfoBox({ children }) {
+  return (
+    <div style={{
+      background: '#e6f2fa',
+      border: '1px solid #a8d4ed',
+      borderLeft: '4px solid #0073bb',
+      borderRadius: 6,
+      padding: '12px 16px',
+      fontSize: 13,
+      color: '#16191f',
+      lineHeight: 1.6,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 function StatCard({ label, value, sub, accent }) {
   return (
     <div className="stat-card" style={accent ? { borderTop: `3px solid ${accent}` } : {}}>
@@ -83,7 +100,7 @@ export default function OverviewTab({ filteredData }) {
   );
 
   const top5DenialData = useMemo(
-    () => stats.top5DenialCodes.map((d) => ({ name: d.code, Count: d.count })),
+    () => stats.top5DenialCodes.map((d) => ({ name: d.code, Amount: d.amt })),
     [stats.top5DenialCodes]
   );
 
@@ -98,9 +115,13 @@ export default function OverviewTab({ filteredData }) {
 
   return (
     <div className="section-gap">
+      <InfoBox>
+        <strong>Overview</strong> — A summary of all charges and payments in the current filtered dataset. All dollar amounts and rates reflect the filters applied above. Use this tab to understand overall payment performance before drilling into specific issues.
+      </InfoBox>
+
       {/* Summary Cards */}
       <div className="cards-grid">
-        <StatCard label="Total Charges" value={fmt$(stats.totalChgAmt)} sub={`${stats.rowCount.toLocaleString()} rows`} accent="#1e40af" />
+        <StatCard label="Total Charges" value={fmt$(stats.totalChgAmt)} sub={`${stats.rowCount.toLocaleString()} rows · ${stats.totalChgCt.toLocaleString()} claims`} accent="#1e40af" />
         <StatCard label="Ins Payments" value={fmt$(stats.totalInsPmt)} sub={`Rate: ${fmtPct(stats.overallPaymentRate)}`} accent="#15803d" />
         <StatCard label="Patient Payments" value={fmt$(stats.totalPtPmt)} accent="#0e7490" />
         <StatCard label="Total Balance" value={fmt$(stats.totalBalance)} accent="#b45309" />
@@ -111,6 +132,18 @@ export default function OverviewTab({ filteredData }) {
           accent="#b91c1c"
         />
         <StatCard label="Overall Pay Rate" value={fmtPct(stats.overallPaymentRate)} sub="InsPmt / ChgAmt" accent="#6d28d9" />
+        <StatCard
+          label="Denial Rate (by $)"
+          value={`${stats.denialRateDollar.toFixed(1)}%`}
+          sub="Denied ChgAmt / Total ChgAmt"
+          accent="#b91c1c"
+        />
+        <StatCard
+          label="Denial Rate (by claim)"
+          value={`${stats.denialRateCount.toFixed(1)}%`}
+          sub="Denied ChgCt / Total ChgCt"
+          accent="#dc2626"
+        />
         <StatCard label="Unique Payers" value={stats.payerCount.toLocaleString()} accent="#1e40af" />
         <StatCard label="Unique CPT Codes" value={stats.cptCount.toLocaleString()} accent="#1e40af" />
       </div>
@@ -202,19 +235,30 @@ export default function OverviewTab({ filteredData }) {
 
         <div className="chart-container">
           <div className="panel-header">
-            <div className="panel-title">Top 5 First Denial Codes</div>
+            <div className="panel-title">Top 5 First Denial Codes (by Charge $)</div>
           </div>
           <div className="panel-body">
             {top5DenialData.length === 0 ? (
               <div className="empty-state"><p>No denial codes in data.</p></div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={top5DenialData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                <BarChart data={top5DenialData} margin={{ top: 4, right: 16, left: 10, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={50} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="Count" fill="#b91c1c" radius={[3, 3, 0, 0]} />
+                  <YAxis tick={{ fontSize: 11 }} width={70} tickFormatter={(v) => fmt$(v)} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0];
+                      return (
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
+                          <div style={{ fontWeight: 600 }}>{d.payload.name}</div>
+                          <div>Denied Charges: {fmt$(d.value)}</div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="Amount" fill="#b91c1c" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

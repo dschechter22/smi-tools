@@ -14,6 +14,23 @@ function fmt$(n) {
   return `$${n.toFixed(2)}`;
 }
 
+function InfoBox({ children }) {
+  return (
+    <div style={{
+      background: '#e6f2fa',
+      border: '1px solid #a8d4ed',
+      borderLeft: '4px solid #0073bb',
+      borderRadius: 6,
+      padding: '12px 16px',
+      fontSize: 13,
+      color: '#16191f',
+      lineHeight: 1.6,
+    }}>
+      {children}
+    </div>
+  );
+}
+
 function VarianceBar({ variance }) {
   const pct = Math.min(variance * 100, 100);
   const color = pct < 10 ? 'var(--success)' : pct < 25 ? 'var(--warning)' : 'var(--danger)';
@@ -31,12 +48,13 @@ export default function LocationComparisonTab({ filteredData }) {
   const comparisons = useMemo(() => calculateLocationComparison(filteredData), [filteredData]);
 
   const columns = [
-    { key: 'payer', label: 'Payer', sortable: true },
-    { key: 'cpt', label: 'CPT', sortable: true },
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
+    { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
     {
       key: 'states',
       label: 'States',
       sortable: false,
+      filterType: 'text',
       render: (r) => (
         <span style={{ fontSize: 12 }}>
           {r.states.split(', ').map((s) => (
@@ -49,6 +67,7 @@ export default function LocationComparisonTab({ filteredData }) {
       key: 'stateCount',
       label: '# States',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
     },
@@ -56,6 +75,7 @@ export default function LocationComparisonTab({ filteredData }) {
       key: 'minRate',
       label: 'Min Rate',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => <span className="rate-red">{fmtPct(r.minRate)}</span>,
@@ -65,6 +85,7 @@ export default function LocationComparisonTab({ filteredData }) {
       key: 'maxRate',
       label: 'Max Rate',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => <span className="rate-green">{fmtPct(r.maxRate)}</span>,
@@ -74,6 +95,7 @@ export default function LocationComparisonTab({ filteredData }) {
       key: 'variance',
       label: 'Rate Variance',
       sortable: true,
+      filterType: 'number',
       render: (r) => <VarianceBar variance={r.variance} />,
       csvValue: (r) => r.variance != null ? (r.variance * 100).toFixed(2) + '%' : '',
     },
@@ -81,6 +103,7 @@ export default function LocationComparisonTab({ filteredData }) {
       key: 'totalChgAmt',
       label: 'Total Chg Amt',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => fmt$(r.totalChgAmt),
@@ -90,6 +113,7 @@ export default function LocationComparisonTab({ filteredData }) {
       key: 'totalChgCt',
       label: 'Total Chg Ct',
       sortable: true,
+      filterType: 'number',
       cellClass: 'td-mono text-right',
       headerClass: 'text-right',
       render: (r) => r.totalChgCt.toLocaleString(),
@@ -109,15 +133,9 @@ export default function LocationComparisonTab({ filteredData }) {
 
   return (
     <div className="section-gap">
-      {/* Explanation */}
-      <div className="panel">
-        <div className="panel-body">
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            <strong style={{ color: 'var(--text)' }}>Location comparison</strong> shows payer/CPT combinations that appear in 2+ states (with at least 5 total charges). A high rate variance between states for the same payer and CPT code likely indicates a contract issue or credentialing problem at a specific location.
-            Results are sorted by rate variance, highest first.
-          </p>
-        </div>
-      </div>
+      <InfoBox>
+        <strong>Location / State Comparison</strong> — Shows the same payer+CPT combination across multiple states. A large rate variance between states suggests a contract issue at a specific location rather than systemic payer behavior. Only combinations appearing in 2+ states with at least 5 total charges are shown.
+      </InfoBox>
 
       {/* Summary */}
       <div className="summary-row">
