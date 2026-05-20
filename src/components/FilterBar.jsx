@@ -53,9 +53,8 @@ function MultiSelect({ label, options, selected, onChange }) {
             />
           </div>
           <div className="multi-select-actions">
-            <button type="button" onClick={() => onChange(selected.length === 0 ? [...filtered] : [])}>
-              {selected.length === 0 ? 'Select all' : 'Clear all'}
-            </button>
+            <button type="button" onClick={() => onChange([...filtered])}>Select all</button>
+            <button type="button" onClick={() => onChange([])}>Clear</button>
           </div>
           <div className="multi-select-list">
             {filtered.length === 0 ? (
@@ -81,31 +80,6 @@ function MultiSelect({ label, options, selected, onChange }) {
   );
 }
 
-// ── Range Filter ──────────────────────────────────────────────────────────────
-
-function RangeFilter({ label, value, onChange }) {
-  return (
-    <div className="filter-group">
-      <label>{label}</label>
-      <div className="range-inputs">
-        <input
-          type="number"
-          placeholder="Min"
-          value={value[0] === '' ? '' : value[0]}
-          onChange={(e) => onChange([e.target.value === '' ? '' : Number(e.target.value), value[1]])}
-        />
-        <span>–</span>
-        <input
-          type="number"
-          placeholder="Max"
-          value={value[1] === '' ? '' : value[1]}
-          onChange={(e) => onChange([value[0], e.target.value === '' ? '' : Number(e.target.value)])}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CATEGORICAL_COLS = [
@@ -122,20 +96,11 @@ const CATEGORICAL_COLS = [
   { key: 'LastDenialCode', label: 'Last Denial Code' },
 ];
 
-const NUMERIC_COLS = [
-  { key: 'ChgAmt', label: 'Charge Amt ($)' },
-  { key: 'PmtAmt', label: 'Payment Amt ($)' },
-  { key: 'InsPmtAmt', label: 'Ins Payment ($)' },
-  { key: 'PtPmtAmt', label: 'Pt Payment ($)' },
-  { key: 'Balance', label: 'Balance ($)' },
-];
-
 // ── Exported Helpers ──────────────────────────────────────────────────────────
 
 export function buildDefaultFilters() {
   const f = {};
   for (const c of CATEGORICAL_COLS) f[c.key] = [];
-  for (const c of NUMERIC_COLS) f[c.key] = ['', ''];
   f.excludeCredits = true;
   f.excludeNonType1CPT = false;
   return f;
@@ -149,14 +114,6 @@ export function applyFilters(data, filters) {
       const sel = filters[key];
       if (sel && sel.length > 0 && !sel.includes(row[key])) return false;
     }
-    for (const { key } of NUMERIC_COLS) {
-      const range = filters[key];
-      if (!range) continue;
-      const [lo, hi] = range;
-      const val = row[key];
-      if (lo !== '' && lo !== null && lo !== undefined && val < Number(lo)) return false;
-      if (hi !== '' && hi !== null && hi !== undefined && val > Number(hi)) return false;
-    }
     return true;
   });
 }
@@ -167,17 +124,12 @@ export function countActiveFilters(filters) {
   for (const { key } of CATEGORICAL_COLS) {
     if (filters[key] && filters[key].length > 0) count++;
   }
-  for (const { key } of NUMERIC_COLS) {
-    const r = filters[key];
-    if (r && (r[0] !== '' || r[1] !== '')) count++;
-  }
   return count;
 }
 
 // ── FilterBar Component ───────────────────────────────────────────────────────
 
 export default function FilterBar({ columnMeta, filters, onFilterChange, onClearAll }) {
-  const [rangesOpen, setRangesOpen] = useState(false);
   const activeCount = countActiveFilters(filters);
 
   const handleCat = useCallback(
@@ -185,17 +137,7 @@ export default function FilterBar({ columnMeta, filters, onFilterChange, onClear
     [filters, onFilterChange]
   );
 
-  const handleRange = useCallback(
-    (key, val) => onFilterChange({ ...filters, [key]: val }),
-    [filters, onFilterChange]
-  );
-
   if (!columnMeta) return null;
-
-  const hasNumericFilters = NUMERIC_COLS.some(({ key }) => {
-    const r = filters[key];
-    return r && (r[0] !== '' || r[1] !== '');
-  });
 
   return (
     <div className="filter-bar">
@@ -243,20 +185,6 @@ export default function FilterBar({ columnMeta, filters, onFilterChange, onClear
           Type-1 CPT only
         </label>
 
-        <div className="filter-chip-divider" />
-
-        {/* Numeric ranges toggle */}
-        <button
-          type="button"
-          className={`filter-chip${hasNumericFilters ? ' has-selection' : ''}`}
-          onClick={() => setRangesOpen((o) => !o)}
-          title="Numeric range filters"
-        >
-          $ Ranges
-          {hasNumericFilters && <span className="chip-count">!</span>}
-          <span style={{ fontSize: 9, opacity: 0.55 }}>{rangesOpen ? '▲' : '▼'}</span>
-        </button>
-
         <div style={{ flex: 1 }} />
 
         {activeCount > 0 && (
@@ -268,25 +196,6 @@ export default function FilterBar({ columnMeta, filters, onFilterChange, onClear
           </>
         )}
       </div>
-
-      {rangesOpen && (
-        <div className="filter-ranges-row">
-          <div className="filter-ranges-body">
-            {NUMERIC_COLS.map(({ key, label }) => {
-              const meta = columnMeta[key];
-              if (!meta || meta.type !== 'numeric') return null;
-              return (
-                <RangeFilter
-                  key={key}
-                  label={label}
-                  value={filters[key] || ['', '']}
-                  onChange={(val) => handleRange(key, val)}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

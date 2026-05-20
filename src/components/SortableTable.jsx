@@ -74,8 +74,8 @@ function ColMultiSelect({ options, selected, onChange }) {
             onClick={(e) => e.stopPropagation()}
           />
           <div className="col-multi-actions">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onChange([...visibleOptions]); }}>Select all</button>
             <button type="button" onClick={(e) => { e.stopPropagation(); onChange([]); }}>Clear</button>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onChange([...visibleOptions]); }}>All visible</button>
           </div>
           <div className="col-multi-list">
             {visibleOptions.length === 0 ? (
