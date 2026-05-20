@@ -5,6 +5,8 @@ export default function FileUpload({ onDataLoaded }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [statusText, setStatusText] = useState('');
   const [error, setError] = useState('');
 
   const handleFile = useCallback(
@@ -12,16 +14,20 @@ export default function FileUpload({ onDataLoaded }) {
       if (!file) return;
       setError('');
       setLoading(true);
+      setProgress(0);
+      setStatusText('Starting…');
       try {
-        const result = await parseFile(file);
-        if (result.rows.length === 0) {
-          throw new Error('The file appears to be empty or has no valid rows.');
-        }
+        const result = await parseFile(file, (pct, status) => {
+          setProgress(pct);
+          if (status) setStatusText(status);
+        });
         onDataLoaded(result, file.name);
       } catch (err) {
         setError(err.message || 'Failed to parse file. Please check the format.');
       } finally {
         setLoading(false);
+        setProgress(null);
+        setStatusText('');
       }
     },
     [onDataLoaded]
@@ -36,17 +42,12 @@ export default function FileUpload({ onDataLoaded }) {
     (e) => {
       e.preventDefault();
       setDragging(false);
-      const file = e.dataTransfer.files?.[0];
-      handleFile(file);
+      handleFile(e.dataTransfer.files?.[0]);
     },
     [handleFile]
   );
 
-  const onDragOver = (e) => {
-    e.preventDefault();
-    setDragging(true);
-  };
-
+  const onDragOver = (e) => { e.preventDefault(); setDragging(true); };
   const onDragLeave = () => setDragging(false);
 
   return (
@@ -54,10 +55,19 @@ export default function FileUpload({ onDataLoaded }) {
       {loading && (
         <div className="loading-overlay">
           <div className="loading-card">
-            <div className="spinner" />
-            <div style={{ fontWeight: 600, color: 'var(--primary)' }}>Parsing file…</div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-              Large files may take a moment
+            <div className="progress-status">{statusText || 'Parsing file…'}</div>
+            {progress !== null ? (
+              <>
+                <div className="progress-bar-track">
+                  <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+                </div>
+                <div className="progress-pct">{progress}%</div>
+              </>
+            ) : (
+              <div className="spinner" />
+            )}
+            <div className="progress-note">
+              Processing in background — UI stays responsive
             </div>
           </div>
         </div>
@@ -66,8 +76,8 @@ export default function FileUpload({ onDataLoaded }) {
       <div className="upload-card">
         <h2>Hospital Payment Analyzer</h2>
         <p>
-          Upload a CSV or Excel file with revenue cycle data. All processing happens in your browser
-          — no data is ever transmitted or stored.
+          Upload a CSV or Excel file with revenue cycle data. All processing happens in your
+          browser — no data is ever transmitted or stored.
         </p>
 
         <div
@@ -83,18 +93,15 @@ export default function FileUpload({ onDataLoaded }) {
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.xlsx,.xls"
+            accept=".csv,.xlsx,.xls,.txt,.tsv"
             onChange={onInputChange}
           />
           <div className="upload-icon">📂</div>
           <h3>Drop file here or click to browse</h3>
-          <p>Supported formats: CSV, Excel (.xlsx, .xls)</p>
+          <p>Supported: CSV, Excel (.xlsx / .xls), TSV, TXT</p>
           <button
             className="btn btn-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              inputRef.current?.click();
-            }}
+            onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
           >
             Select File
           </button>
