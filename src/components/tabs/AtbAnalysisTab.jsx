@@ -372,10 +372,14 @@ function AtbUploadCard({ onAtbDataLoaded }) {
     setProgress(0);
     setStatusText('Starting…');
     try {
-      const rows = await parseAtbFile(file, (pct, status) => {
+      const { rows, sheetName, sampleKeys } = await parseAtbFile(file, (pct, status) => {
         setProgress(pct);
         if (status) setStatusText(status);
       });
+      if (rows.length === 0) {
+        setError(`No rows found in sheet "${sheetName}". Columns seen: ${sampleKeys || 'none'}`);
+        return;
+      }
       onAtbDataLoaded(rows, file.name);
     } catch (err) {
       setError(err.message || 'Failed to parse ATB file.');

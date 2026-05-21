@@ -11,7 +11,10 @@ export function parseAtbFile(file, onProgress) {
     worker.onmessage = (e) => {
       const { type, ...payload } = e.data;
       if (type === 'progress') onProgress?.(payload.pct, payload.status);
-      else if (type === 'complete') { worker.terminate(); resolve(payload.rows); }
+      else if (type === 'complete') {
+        worker.terminate();
+        resolve({ rows: payload.rows, sheetName: payload.sheetName, sampleKeys: payload.sampleKeys });
+      }
       else if (type === 'error') { worker.terminate(); reject(new Error(payload.message)); }
     };
     worker.onerror = (err) => { worker.terminate(); reject(new Error(err.message || 'Worker error')); };
