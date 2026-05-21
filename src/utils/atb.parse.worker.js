@@ -6,13 +6,15 @@ self.onmessage = async (e) => {
   const { file, ext } = e.data;
   try {
     post('progress', { pct: 10, status: 'Reading file…' });
-    if (!['xlsx', 'xls'].includes(ext)) throw new Error('ATB files must be Excel (.xlsx or .xls).');
+    if (!['xlsx', 'xls', 'xlsb'].includes(ext)) throw new Error('ATB files must be Excel (.xlsx, .xls, or .xlsb).');
     const wb = XLSX.read(file, { type: 'array', cellDates: true });
     post('progress', { pct: 50, status: 'Converting…' });
-    let sheet = null;
-    for (const name of wb.SheetNames) {
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' });
-      if (rows.length > 0) { sheet = wb.Sheets[name]; break; }
+    const DEBIT_SHEET = 'Debit';
+    let sheet = wb.Sheets[DEBIT_SHEET];
+    if (!sheet) {
+      const fallback = wb.SheetNames.find(n => wb.Sheets[n] && XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: '' }).length > 0);
+      if (!fallback) throw new Error('No "Debit" sheet found and no sheets with data.');
+      sheet = wb.Sheets[fallback];
     }
     if (!sheet) throw new Error('No data found in Excel file.');
     const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });

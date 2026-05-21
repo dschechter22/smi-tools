@@ -3,8 +3,8 @@ import AtbParseWorker from './atb.parse.worker.js?worker';
 export function parseAtbFile(file, onProgress) {
   return new Promise((resolve, reject) => {
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!['xlsx', 'xls'].includes(ext)) {
-      reject(new Error('ATB files must be Excel (.xlsx or .xls).'));
+    if (!['xlsx', 'xls', 'xlsb'].includes(ext)) {
+      reject(new Error('ATB files must be Excel (.xlsb, .xlsx, or .xls).'));
       return;
     }
     const worker = new AtbParseWorker();
