@@ -310,6 +310,11 @@ export function buildAtbAgingBreakdown(data) {
     .map((b) => map[b]);
 }
 
+function parseBucketStart(s) {
+  const m = String(s).match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 9999;
+}
+
 export function buildStackedAgingByBucket(rows, bucketCol, bucketOrder) {
   const map = {};
   for (const row of rows) {
@@ -322,7 +327,9 @@ export function buildStackedAgingByBucket(rows, bucketCol, bucketOrder) {
   }
   const ordered = (bucketOrder || []).filter((b) => map[b]).map((b) => map[b]);
   const seen = new Set(bucketOrder || []);
-  const extra = Object.values(map).filter((r) => !seen.has(r.bucket));
+  const extra = Object.values(map)
+    .filter((r) => !seen.has(r.bucket))
+    .sort((a, b) => parseBucketStart(a.bucket) - parseBucketStart(b.bucket));
   return [...ordered, ...extra].filter((r) => (r.Unbilled + r.Unresponded + r.Responded) > 0);
 }
 
@@ -568,7 +575,9 @@ export function buildAtbColumnMeta(data) {
     } else if (field === 'MAD Aging Bucket') {
       const orderedMad = STANDARD_BUCKET_ORDER.filter((b) => valSet.has(b));
       const seenMad = new Set(STANDARD_BUCKET_ORDER);
-      const extraMad = Array.from(valSet).filter((v) => !seenMad.has(v)).sort((a, b) => a.localeCompare(b));
+      const extraMad = Array.from(valSet)
+        .filter((v) => !seenMad.has(v))
+        .sort((a, b) => parseBucketStart(a) - parseBucketStart(b));
       result[field] = [...orderedMad, ...extraMad];
     } else {
       result[field] = Array.from(valSet).sort((a, b) => a.localeCompare(b));

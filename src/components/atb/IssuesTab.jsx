@@ -1,40 +1,112 @@
 import React, { useMemo, useState } from 'react';
-import {
-  buildBucketBreakdown, STANDARD_BUCKET_ORDER, BALANCE_TIER_ORDER,
-  hasDenialCode,
-} from '../../utils/atbCalculations.js';
+import { hasDenialCode } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
 import DrillAnalyticsPanel from './DrillAnalyticsPanel.jsx';
-import { fmt$, fmtPct } from '../../utils/format.js';
+import { fmt$ } from '../../utils/format.js';
 
-// ── Thresholds ────────────────────────────────────────────────────────────────
+// ── Default thresholds ────────────────────────────────────────────────────────
 
-const T = {
-  MAD_CRIT: 120, MAD_WARN: 60,
-  FILE_AGE_CRIT: 90, FILE_AGE_WARN: 60,
-  DENIAL_RATE_CRIT: 25, DENIAL_RATE_WARN: 15,
-  RESP_RATE_CRIT: 25, RESP_RATE_WARN: 50,
-  BILLING_LAG_CRIT: 30, BILLING_LAG_WARN: 14,
-  STALE_DOS_CRIT: 60, STALE_DOS_WARN: 30,
+const DEFAULT_T = {
+  DOS_WARN: 60,       DOS_CRIT: 90,
+  MAD_WARN: 30,       MAD_CRIT: 60,
+  FILE_AGE_WARN: 60,  FILE_AGE_CRIT: 90,
+  LAST_INS_WARN: 60,  LAST_INS_CRIT: 90,
+  DENIAL_RATE_WARN: 15, DENIAL_RATE_CRIT: 25,
+  RESP_RATE_WARN: 50,   RESP_RATE_CRIT: 25,
+  STALE_DOS_WARN: 30,   STALE_DOS_CRIT: 60,
   HIGH_VALUE: 2500,
   MIN_CLAIMS: 5,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function flag(value, warnThreshold, critThreshold, reverse = false) {
-  if (value == null) return null;
-  const isCrit = reverse ? value <= critThreshold : value >= critThreshold;
-  const isWarn = reverse ? value <= warnThreshold : value >= warnThreshold;
+function isAgedClaim(r, T) {
+  const mad = parseFloat(r['MAD Age']);
+  return (
+    (T.MAD_WARN > 0 && !isNaN(mad) && mad >= T.MAD_WARN) ||
+    (T.DOS_WARN > 0 && r._dosAge != null && r._dosAge >= T.DOS_WARN) ||
+    (T.FILE_AGE_WARN > 0 && r._initialFileDateAge != null && r._initialFileDateAge >= T.FILE_AGE_WARN) ||
+    (T.LAST_INS_WARN > 0 && r._lastInsFileDateAge != null && r._lastInsFileDateAge >= T.LAST_INS_WARN)
+  );
+}
+
+function flagVal(value, warn, crit, reverse = false) {
+  if (value == null || warn <= 0) return null;
+  const isCrit = reverse ? (crit > 0 && value <= crit) : (crit > 0 && value >= crit);
+  const isWarn = reverse ? value <= warn : value >= warn;
   if (isCrit) return <span className="issue-flag issue-flag-crit">Critical</span>;
   if (isWarn) return <span className="issue-flag issue-flag-warn">Warning</span>;
   return null;
 }
 
-function ageBadge(days) {
-  if (days == null) return '—';
-  const f = flag(days, T.MAD_WARN, T.MAD_CRIT);
-  return <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{days}d {f}</span>;
+// ── Threshold settings panel ──────────────────────────────────────────────────
+
+function TInput({ label, warnKey, critKey, T, onChange, reverse }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 36 }}>{reverse ? 'Warn ≤' : 'Warn ≥'}</span>
+        <input
+          type="number" min={0}
+          style={{ width: 70, padding: '3px 6px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--card-bg)', color: 'var(--text)' }}
+          value={T[warnKey]}
+          onChange={(e) => onChange(warnKey, e.target.value)}
+        />
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 36 }}>{reverse ? 'Crit ≤' : 'Crit ≥'}</span>
+        <input
+          type="number" min={0}
+          style={{ width: 70, padding: '3px 6px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--card-bg)', color: 'var(--text)' }}
+          value={T[critKey]}
+          onChange={(e) => onChange(critKey, e.target.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ThresholdPanel({ T, onChange }) {
+  const [open, setOpen] = useState(false);
+  const set = (key, val) => onChange({ ...T, [key]: val === '' ? 0 : Number(val) });
+
+  return (
+    <div className="panel">
+      <div
+        className="panel-header"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="panel-title">⚙ Issue Thresholds</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>
+          {open ? 'Collapse' : 'Click to configure — set warn/crit to 0 to disable a category'}
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 20 }}>
+          <TInput label="DOS Age (days)" warnKey="DOS_WARN" critKey="DOS_CRIT" T={T} onChange={set} />
+          <TInput label="MAD Age (days)" warnKey="MAD_WARN" critKey="MAD_CRIT" T={T} onChange={set} />
+          <TInput label="Initial File Date Age (days)" warnKey="FILE_AGE_WARN" critKey="FILE_AGE_CRIT" T={T} onChange={set} />
+          <TInput label="Last Ins. File Date Age (days)" warnKey="LAST_INS_WARN" critKey="LAST_INS_CRIT" T={T} onChange={set} />
+          <TInput label="Denial Rate (%)" warnKey="DENIAL_RATE_WARN" critKey="DENIAL_RATE_CRIT" T={T} onChange={set} />
+          <TInput label="Response Rate (%) — lower is worse" warnKey="RESP_RATE_WARN" critKey="RESP_RATE_CRIT" T={T} onChange={set} reverse />
+          <TInput label="Stale Unbilled DOS Age (days)" warnKey="STALE_DOS_WARN" critKey="STALE_DOS_CRIT" T={T} onChange={set} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>High-Value Balance ($)</div>
+            <input type="number" min={0}
+              style={{ width: 120, padding: '3px 6px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--card-bg)', color: 'var(--text)' }}
+              value={T.HIGH_VALUE} onChange={(e) => set('HIGH_VALUE', e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Min Claims (significance)</div>
+            <input type="number" min={1}
+              style={{ width: 80, padding: '3px 6px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--card-bg)', color: 'var(--text)' }}
+              value={T.MIN_CLAIMS} onChange={(e) => set('MIN_CLAIMS', e.target.value)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
@@ -56,10 +128,11 @@ function IssueSection({ title, subtitle, alertCount, children }) {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function IssuesTab({ filteredData }) {
-  const [drill, setDrill] = useState(null); // { rows, title, subtitle }
+  const [T, setT] = useState(DEFAULT_T);
+  const [drill, setDrill] = useState(null);
 
   const billedRows   = useMemo(() => filteredData.filter((r) => !r._isUnbilled), [filteredData]);
   const unbilledRows = useMemo(() => filteredData.filter((r) => r._isUnbilled),  [filteredData]);
@@ -73,93 +146,117 @@ export default function IssuesTab({ filteredData }) {
     const map = {};
     for (const r of billedRows) {
       const c = r._carrier || '(Unknown)';
-      if (!map[c]) map[c] = { carrier: c, balance: 0, count: 0, madSum: 0, madN: 0, fileAgeSum: 0, fileAgeN: 0 };
+      if (!map[c]) map[c] = { carrier: c, agedBalance: 0, agedCount: 0, madSum: 0, madN: 0, fileAgeSum: 0, fileAgeN: 0 };
       const g = map[c];
-      g.balance += r._balance; g.count++;
       const mad = parseFloat(r['MAD Age']);
       if (!isNaN(mad)) { g.madSum += mad; g.madN++; }
       if (r._initialFileDateAge != null) { g.fileAgeSum += r._initialFileDateAge; g.fileAgeN++; }
+      if (isAgedClaim(r, T)) { g.agedBalance += r._balance; g.agedCount++; }
     }
-    return Object.values(map).map((g) => ({
-      carrier: g.carrier, balance: g.balance, count: g.count,
-      avgMadAge: g.madN > 0 ? Math.round(g.madSum / g.madN) : null,
-      avgFileAge: g.fileAgeN > 0 ? Math.round(g.fileAgeSum / g.fileAgeN) : null,
-    })).filter((r) => r.count >= T.MIN_CLAIMS).sort((a, b) => (b.avgMadAge || 0) - (a.avgMadAge || 0));
-  }, [billedRows]);
+    return Object.values(map)
+      .map((g) => ({
+        carrier: g.carrier,
+        agedBalance: g.agedBalance,
+        agedCount: g.agedCount,
+        avgMadAge: g.madN > 0 ? Math.round(g.madSum / g.madN) : null,
+        avgFileAge: g.fileAgeN > 0 ? Math.round(g.fileAgeSum / g.fileAgeN) : null,
+      }))
+      .filter((r) => r.agedCount >= T.MIN_CLAIMS)
+      .sort((a, b) => b.agedBalance - a.agedBalance);
+  }, [billedRows, T]);
 
-  const agedCarrierAlerts = agedCarriers.filter((r) => (r.avgMadAge || 0) >= T.MAD_WARN || (r.avgFileAge || 0) >= T.FILE_AGE_WARN).length;
+  const agedCarrierAlerts = agedCarriers.filter((r) =>
+    (r.avgMadAge != null && T.MAD_CRIT > 0 && r.avgMadAge >= T.MAD_CRIT) ||
+    (r.avgFileAge != null && T.FILE_AGE_CRIT > 0 && r.avgFileAge >= T.FILE_AGE_CRIT)
+  ).length;
 
   // ── 2. Aged Billed AR — By Plan ────────────────────────────────────────────
   const agedPlans = useMemo(() => {
     const map = {};
     for (const r of billedRows) {
       const p = String(r.InsurancePlanDescription || '').trim() || '(Unknown)';
-      if (!map[p]) map[p] = { plan: p, carrier: r._carrier || '', balance: 0, count: 0, madSum: 0, madN: 0, fileAgeSum: 0, fileAgeN: 0 };
+      if (!map[p]) map[p] = { plan: p, carrier: r._carrier || '', agedBalance: 0, agedCount: 0, madSum: 0, madN: 0, fileAgeSum: 0, fileAgeN: 0 };
       const g = map[p];
-      g.balance += r._balance; g.count++;
       const mad = parseFloat(r['MAD Age']);
       if (!isNaN(mad)) { g.madSum += mad; g.madN++; }
       if (r._initialFileDateAge != null) { g.fileAgeSum += r._initialFileDateAge; g.fileAgeN++; }
+      if (isAgedClaim(r, T)) { g.agedBalance += r._balance; g.agedCount++; }
     }
-    return Object.values(map).map((g) => ({
-      plan: g.plan, carrier: g.carrier, balance: g.balance, count: g.count,
-      avgMadAge: g.madN > 0 ? Math.round(g.madSum / g.madN) : null,
-      avgFileAge: g.fileAgeN > 0 ? Math.round(g.fileAgeSum / g.fileAgeN) : null,
-    })).filter((r) => r.count >= T.MIN_CLAIMS).sort((a, b) => (b.avgMadAge || 0) - (a.avgMadAge || 0));
-  }, [billedRows]);
+    return Object.values(map)
+      .map((g) => ({
+        plan: g.plan, carrier: g.carrier,
+        agedBalance: g.agedBalance, agedCount: g.agedCount,
+        avgMadAge: g.madN > 0 ? Math.round(g.madSum / g.madN) : null,
+        avgFileAge: g.fileAgeN > 0 ? Math.round(g.fileAgeSum / g.fileAgeN) : null,
+      }))
+      .filter((r) => r.agedCount >= T.MIN_CLAIMS)
+      .sort((a, b) => b.agedBalance - a.agedBalance);
+  }, [billedRows, T]);
 
-  const agedPlanAlerts = agedPlans.filter((r) => (r.avgMadAge || 0) >= T.MAD_WARN || (r.avgFileAge || 0) >= T.FILE_AGE_WARN).length;
+  const agedPlanAlerts = agedPlans.filter((r) =>
+    (r.avgMadAge != null && T.MAD_CRIT > 0 && r.avgMadAge >= T.MAD_CRIT) ||
+    (r.avgFileAge != null && T.FILE_AGE_CRIT > 0 && r.avgFileAge >= T.FILE_AGE_CRIT)
+  ).length;
 
-  // ── 3. Stale Unbilled Claims ────────────────────────────────────────────────
+  // ── 3. Stale Unbilled ──────────────────────────────────────────────────────
   const staleUnbilled = useMemo(() => {
     const map = {};
     for (const r of unbilledRows) {
-      if ((r._dosAge || 0) < T.STALE_DOS_WARN) continue;
+      if (T.STALE_DOS_WARN <= 0 || (r._dosAge || 0) < T.STALE_DOS_WARN) continue;
       const c = r._carrier || '(Unknown)';
       if (!map[c]) map[c] = { carrier: c, balance: 0, count: 0, maxDosAge: 0 };
-      const g = map[c];
-      g.balance += r._balance; g.count++;
-      if ((r._dosAge || 0) > g.maxDosAge) g.maxDosAge = r._dosAge;
+      map[c].balance += r._balance;
+      map[c].count++;
+      if ((r._dosAge || 0) > map[c].maxDosAge) map[c].maxDosAge = r._dosAge;
     }
     return Object.values(map).sort((a, b) => b.balance - a.balance);
-  }, [unbilledRows]);
+  }, [unbilledRows, T.STALE_DOS_WARN]);
 
-  const staleAlerts = staleUnbilled.filter((r) => r.maxDosAge >= T.STALE_DOS_CRIT).length;
+  const staleAlerts = staleUnbilled.filter((r) => T.STALE_DOS_CRIT > 0 && r.maxDosAge >= T.STALE_DOS_CRIT).length;
 
-  // ── 4. Denial Rate — By CPT Code ───────────────────────────────────────────
-  const denialByCpt = useMemo(() => {
-    const billed = {}, denied = {};
+  // ── 4. Denial Rate Outliers — Plan × CPT ───────────────────────────────────
+  const denialByPlanCpt = useMemo(() => {
+    const cptMap = {};
     for (const r of billedRows) {
       const cpt = String(r.CPTCode || '').trim() || '(Unknown)';
-      billed[cpt] = (billed[cpt] || 0) + r._balance;
-    }
-    for (const r of denialRows) {
-      const cpt = String(r.CPTCode || '').trim() || '(Unknown)';
-      if (!denied[cpt]) denied[cpt] = { balance: 0, count: 0, topCode: null, topBal: 0, codes: {} };
-      denied[cpt].balance += r._balance;
-      denied[cpt].count++;
-      const code = String(r.FirstDenialCode || '').trim();
-      if (code) {
-        denied[cpt].codes[code] = (denied[cpt].codes[code] || 0) + r._balance;
-        if (denied[cpt].codes[code] > denied[cpt].topBal) { denied[cpt].topCode = code; denied[cpt].topBal = denied[cpt].codes[code]; }
+      const plan = String(r.InsurancePlanDescription || '').trim() || '(Unknown)';
+      if (!cptMap[cpt]) cptMap[cpt] = { totalBilled: 0, totalDenied: 0, plans: {} };
+      cptMap[cpt].totalBilled += r._balance;
+      if (!cptMap[cpt].plans[plan]) cptMap[cpt].plans[plan] = { billed: 0, denied: 0, deniedCount: 0, carrier: r._carrier || '' };
+      cptMap[cpt].plans[plan].billed += r._balance;
+      if (hasDenialCode(r)) {
+        cptMap[cpt].totalDenied += r._balance;
+        cptMap[cpt].plans[plan].denied += r._balance;
+        cptMap[cpt].plans[plan].deniedCount++;
       }
     }
-    return Object.keys(billed)
-      .filter((cpt) => billed[cpt] > 0 && denied[cpt])
-      .map((cpt) => ({
-        cpt, billedBalance: billed[cpt],
-        deniedBalance: denied[cpt].balance,
-        deniedCount: denied[cpt].count,
-        topCode: denied[cpt].topCode,
-        denialRate: (denied[cpt].balance / billed[cpt]) * 100,
-      }))
-      .filter((r) => r.denialRate >= T.DENIAL_RATE_WARN)
-      .sort((a, b) => b.denialRate - a.denialRate);
-  }, [billedRows, denialRows]);
+    const results = [];
+    for (const [cpt, cd] of Object.entries(cptMap)) {
+      const cptAvgRate = cd.totalBilled > 0 ? (cd.totalDenied / cd.totalBilled) * 100 : 0;
+      const planEntries = Object.entries(cd.plans);
+      if (planEntries.length < 2) continue;
+      for (const [plan, pd] of planEntries) {
+        if (pd.deniedCount < 1 || pd.billed === 0) continue;
+        const planRate = (pd.denied / pd.billed) * 100;
+        if (T.DENIAL_RATE_WARN > 0 && planRate >= T.DENIAL_RATE_WARN) {
+          results.push({
+            cpt, plan, carrier: pd.carrier,
+            deniedBalance: pd.denied,
+            deniedCount: pd.deniedCount,
+            billedBalance: pd.billed,
+            planDenialRate: planRate,
+            cptAvgRate,
+            vsAvg: planRate - cptAvgRate,
+          });
+        }
+      }
+    }
+    return results.sort((a, b) => b.vsAvg - a.vsAvg);
+  }, [billedRows, T.DENIAL_RATE_WARN]);
 
-  const cptDenialAlerts = denialByCpt.filter((r) => r.denialRate >= T.DENIAL_RATE_CRIT).length;
+  const planCptDenialAlerts = denialByPlanCpt.filter((r) => T.DENIAL_RATE_CRIT > 0 && r.planDenialRate >= T.DENIAL_RATE_CRIT).length;
 
-  // ── 5. Denial Rate — By Carrier ────────────────────────────────────────────
+  // ── 5. Denial Rate Outliers — By Carrier ───────────────────────────────────
   const denialByCarrier = useMemo(() => {
     const billed = {}, denied = {};
     for (const r of billedRows) {
@@ -173,7 +270,7 @@ export default function IssuesTab({ filteredData }) {
       denied[c].count++;
     }
     return Object.keys(billed)
-      .filter((c) => denied[c])
+      .filter((c) => denied[c] && T.DENIAL_RATE_WARN > 0 && (denied[c].balance / billed[c]) * 100 >= T.DENIAL_RATE_WARN)
       .map((c) => ({
         carrier: c,
         billedBalance: billed[c],
@@ -181,18 +278,17 @@ export default function IssuesTab({ filteredData }) {
         deniedCount: denied[c].count,
         denialRate: (denied[c].balance / billed[c]) * 100,
       }))
-      .filter((r) => r.denialRate >= T.DENIAL_RATE_WARN)
       .sort((a, b) => b.denialRate - a.denialRate);
-  }, [billedRows, denialRows]);
+  }, [billedRows, denialRows, T.DENIAL_RATE_WARN]);
 
-  const carrierDenialAlerts = denialByCarrier.filter((r) => r.denialRate >= T.DENIAL_RATE_CRIT).length;
+  const carrierDenialAlerts = denialByCarrier.filter((r) => T.DENIAL_RATE_CRIT > 0 && r.denialRate >= T.DENIAL_RATE_CRIT).length;
 
-  // ── 6. Re-denied Claims (Escalating Denials) ───────────────────────────────
+  // ── 6. Re-denials ──────────────────────────────────────────────────────────
   const redenials = useMemo(() => {
     const map = {};
     for (const r of denialRows) {
       const first = String(r.FirstDenialCode || '').trim();
-      const last = String(r.LastDenialCode || '').trim();
+      const last  = String(r.LastDenialCode  || '').trim();
       if (!first || !last || first === last) continue;
       const key = `${first} → ${last}`;
       if (!map[key]) map[key] = { pathway: key, firstCode: first, lastCode: last, balance: 0, count: 0 };
@@ -204,210 +300,214 @@ export default function IssuesTab({ filteredData }) {
 
   // ── 7. High-Value Exposed Claims ───────────────────────────────────────────
   const highValueExposed = useMemo(() =>
-    filteredData
-      .filter((r) => r._balance >= T.HIGH_VALUE && (r._status === 'Unresponded' || hasDenialCode(r)))
-      .sort((a, b) => b._balance - a._balance)
-      .slice(0, 100),
-    [filteredData],
+    T.HIGH_VALUE > 0
+      ? filteredData
+          .filter((r) => r._balance >= T.HIGH_VALUE && (r._status === 'Unresponded' || hasDenialCode(r)))
+          .sort((a, b) => b._balance - a._balance)
+          .slice(0, 100)
+      : [],
+    [filteredData, T.HIGH_VALUE],
   );
 
-  // ── 8. Carrier Response Rate Laggards ──────────────────────────────────────
+  // ── 8. Response Rate Laggards ──────────────────────────────────────────────
   const responseLaggards = useMemo(() => {
     const map = {};
     for (const r of billedRows) {
       const c = r._carrier || '(Unknown)';
-      if (!map[c]) map[c] = { carrier: c, balance: 0, total: 0, responded: 0, respondedBal: 0, unrespondedBal: 0 };
-      const g = map[c];
-      g.balance += r._balance; g.total++;
-      if (r._status === 'Responded') { g.responded++; g.respondedBal += r._balance; }
-      else g.unrespondedBal += r._balance;
+      if (!map[c]) map[c] = { carrier: c, total: 0, responded: 0, unrespondedBal: 0 };
+      map[c].total++;
+      if (r._status === 'Responded') map[c].responded++;
+      else map[c].unrespondedBal += r._balance;
     }
     return Object.values(map)
       .map((g) => ({
-        carrier: g.carrier, balance: g.balance,
+        carrier: g.carrier,
         responseRate: g.total > 0 ? (g.responded / g.total) * 100 : 0,
         unrespondedBalance: g.unrespondedBal,
-        respondedBalance: g.respondedBal,
         claimCount: g.total,
       }))
-      .filter((r) => r.claimCount >= T.MIN_CLAIMS && r.responseRate < T.RESP_RATE_WARN)
+      .filter((r) => r.claimCount >= T.MIN_CLAIMS && T.RESP_RATE_WARN > 0 && r.responseRate < T.RESP_RATE_WARN)
       .sort((a, b) => a.responseRate - b.responseRate);
-  }, [billedRows]);
+  }, [billedRows, T.MIN_CLAIMS, T.RESP_RATE_WARN]);
 
-  const respAlerts = responseLaggards.filter((r) => r.responseRate < T.RESP_RATE_CRIT).length;
+  const respAlerts = responseLaggards.filter((r) => T.RESP_RATE_CRIT > 0 && r.responseRate < T.RESP_RATE_CRIT).length;
 
-  // ── 9. Billing Lag (DOS → Initial File Date) ───────────────────────────────
-  const billingLag = useMemo(() => {
-    const map = {};
+  // ── 9. Aging Outliers — Plan × CPT (within carrier) ───────────────────────
+  const agingByPlanCpt = useMemo(() => {
+    const ccMap = {};
     for (const r of billedRows) {
-      if (r._dosAge == null || r._initialFileDateAge == null) continue;
-      const lag = r._dosAge - r._initialFileDateAge;
-      if (lag < 0) continue;
-      const c = r._carrier || '(Unknown)';
-      if (!map[c]) map[c] = { carrier: c, lagSum: 0, lagN: 0, balance: 0 };
-      map[c].lagSum += lag; map[c].lagN++; map[c].balance += r._balance;
+      const cpt     = String(r.CPTCode || '').trim() || '(Unknown)';
+      const plan    = String(r.InsurancePlanDescription || '').trim() || '(Unknown)';
+      const carrier = r._carrier || '(Unknown)';
+      const key     = `${carrier}|||${cpt}`;
+      if (!ccMap[key]) ccMap[key] = { carrier, cpt, madSum: 0, madN: 0, plans: {} };
+      const mad = parseFloat(r['MAD Age']);
+      if (!isNaN(mad)) { ccMap[key].madSum += mad; ccMap[key].madN++; }
+      if (!ccMap[key].plans[plan]) ccMap[key].plans[plan] = { plan, madSum: 0, madN: 0, agedBalance: 0, agedCount: 0, totalCount: 0 };
+      const g = ccMap[key].plans[plan];
+      g.totalCount++;
+      if (!isNaN(mad)) { g.madSum += mad; g.madN++; }
+      if (isAgedClaim(r, T)) { g.agedBalance += r._balance; g.agedCount++; }
     }
-    return Object.values(map)
-      .map((g) => ({ carrier: g.carrier, avgBillingLag: Math.round(g.lagSum / g.lagN), balance: g.balance, claimCount: g.lagN }))
-      .filter((r) => r.claimCount >= T.MIN_CLAIMS && r.avgBillingLag >= T.BILLING_LAG_WARN)
-      .sort((a, b) => b.avgBillingLag - a.avgBillingLag);
-  }, [billedRows]);
-
-  const lagAlerts = billingLag.filter((r) => r.avgBillingLag >= T.BILLING_LAG_CRIT).length;
-
-  // ── 10. Carrier Concentration Risk ─────────────────────────────────────────
-  const totalBalance = useMemo(() => filteredData.reduce((s, r) => s + r._balance, 0), [filteredData]);
-
-  const concentrationRisk = useMemo(() => {
-    const map = {};
-    for (const r of filteredData) {
-      const c = r._carrier || '(Unknown)';
-      if (!map[c]) map[c] = { carrier: c, balance: 0, billed: 0, denied: 0, unresponded: 0, total: 0 };
-      const g = map[c];
-      g.balance += r._balance; g.total++;
-      if (!r._isUnbilled) {
-        g.billed += r._balance;
-        if (hasDenialCode(r)) g.denied += r._balance;
-        else if (r._status === 'Unresponded') g.unresponded += r._balance;
+    const results = [];
+    for (const ccData of Object.values(ccMap)) {
+      const planList = Object.values(ccData.plans);
+      if (planList.length < 2) continue;
+      const carrierAvg = ccData.madN > 0 ? ccData.madSum / ccData.madN : null;
+      if (carrierAvg == null) continue;
+      for (const pd of planList) {
+        if (pd.totalCount < T.MIN_CLAIMS || pd.madN === 0) continue;
+        const planAvg = pd.madSum / pd.madN;
+        if (T.MAD_WARN > 0 && planAvg >= T.MAD_WARN) {
+          const vsAvgPct = carrierAvg > 0 ? Math.round(((planAvg - carrierAvg) / carrierAvg) * 100) : 0;
+          if (vsAvgPct > 0) {
+            results.push({
+              cpt: ccData.cpt,
+              plan: pd.plan,
+              carrier: ccData.carrier,
+              agedBalance: pd.agedBalance,
+              agedCount: pd.agedCount,
+              avgMad: Math.round(planAvg),
+              carrierAvgMad: Math.round(carrierAvg),
+              vsAvgPct,
+            });
+          }
+        }
       }
     }
-    return Object.values(map)
-      .map((g) => ({
-        carrier: g.carrier, balance: g.balance,
-        arShare: totalBalance > 0 ? (g.balance / totalBalance) * 100 : 0,
-        denialRate: g.billed > 0 ? (g.denied / g.billed) * 100 : 0,
-        unrespondedRate: g.billed > 0 ? (g.unresponded / g.billed) * 100 : 0,
-        claimCount: g.total,
-      }))
-      .filter((r) => r.arShare >= 5)
-      .sort((a, b) => b.balance - a.balance);
-  }, [filteredData, totalBalance]);
+    return results.sort((a, b) => b.vsAvgPct - a.vsAvgPct);
+  }, [billedRows, T]);
 
-  const concAlerts = concentrationRisk.filter((r) => r.arShare >= 10 && r.denialRate >= T.DENIAL_RATE_WARN).length;
+  const agingOutlierAlerts = agingByPlanCpt.filter((r) => T.MAD_CRIT > 0 && r.avgMad >= T.MAD_CRIT).length;
 
-  if (filteredData.length === 0) return <div className="empty-state"><p>No data matches current filters.</p></div>;
+  if (filteredData.length === 0) {
+    return <div className="empty-state"><p>No data matches current filters.</p></div>;
+  }
 
   // ── Column definitions ────────────────────────────────────────────────────
 
   const AGED_CARRIER_COLS = [
     { key: 'carrier', label: 'Carrier', filterType: 'text' },
-    { key: 'balance', label: 'Billed Balance', filterType: 'number', render: (r) => fmt$(r.balance) },
-    { key: 'count', label: 'Claims', filterType: 'number' },
-    {
-      key: 'avgMadAge', label: 'Avg MAD Age', filterType: 'number',
-      render: (r) => r.avgMadAge != null ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgMadAge}d {flag(r.avgMadAge, T.MAD_WARN, T.MAD_CRIT)}</span> : '—',
-    },
-    {
-      key: 'avgFileAge', label: 'Avg File Date Age', filterType: 'number',
-      render: (r) => r.avgFileAge != null ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgFileAge}d {flag(r.avgFileAge, T.FILE_AGE_WARN, T.FILE_AGE_CRIT)}</span> : '—',
-    },
+    { key: 'agedBalance', label: 'Aged Balance', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r.agedBalance)}</span> },
+    { key: 'agedCount', label: 'Aged Claims', filterType: 'number' },
+    { key: 'avgMadAge', label: 'Avg MAD Age', filterType: 'number',
+      render: (r) => r.avgMadAge != null
+        ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgMadAge}d {flagVal(r.avgMadAge, T.MAD_WARN, T.MAD_CRIT)}</span>
+        : '—' },
+    { key: 'avgFileAge', label: 'Avg File Date Age', filterType: 'number',
+      render: (r) => r.avgFileAge != null
+        ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgFileAge}d {flagVal(r.avgFileAge, T.FILE_AGE_WARN, T.FILE_AGE_CRIT)}</span>
+        : '—' },
   ];
 
   const AGED_PLAN_COLS = [
     { key: 'plan', label: 'Plan', filterType: 'text' },
     { key: 'carrier', label: 'Carrier', filterType: 'text' },
-    { key: 'balance', label: 'Billed Balance', filterType: 'number', render: (r) => fmt$(r.balance) },
-    { key: 'count', label: 'Claims', filterType: 'number' },
-    {
-      key: 'avgMadAge', label: 'Avg MAD Age', filterType: 'number',
-      render: (r) => r.avgMadAge != null ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgMadAge}d {flag(r.avgMadAge, T.MAD_WARN, T.MAD_CRIT)}</span> : '—',
-    },
-    {
-      key: 'avgFileAge', label: 'Avg File Date Age', filterType: 'number',
-      render: (r) => r.avgFileAge != null ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgFileAge}d {flag(r.avgFileAge, T.FILE_AGE_WARN, T.FILE_AGE_CRIT)}</span> : '—',
-    },
+    { key: 'agedBalance', label: 'Aged Balance', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r.agedBalance)}</span> },
+    { key: 'agedCount', label: 'Aged Claims', filterType: 'number' },
+    { key: 'avgMadAge', label: 'Avg MAD Age', filterType: 'number',
+      render: (r) => r.avgMadAge != null
+        ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgMadAge}d {flagVal(r.avgMadAge, T.MAD_WARN, T.MAD_CRIT)}</span>
+        : '—' },
+    { key: 'avgFileAge', label: 'Avg File Date Age', filterType: 'number',
+      render: (r) => r.avgFileAge != null
+        ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgFileAge}d {flagVal(r.avgFileAge, T.FILE_AGE_WARN, T.FILE_AGE_CRIT)}</span>
+        : '—' },
   ];
 
   const STALE_UNBILLED_COLS = [
     { key: 'carrier', label: 'Carrier', filterType: 'text' },
-    { key: 'balance', label: 'Balance', filterType: 'number', render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r.balance)}</span> },
-    { key: 'count', label: 'Claims', filterType: 'number' },
-    {
-      key: 'maxDosAge', label: 'Max DOS Age', filterType: 'number',
-      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.maxDosAge}d {flag(r.maxDosAge, T.STALE_DOS_WARN, T.STALE_DOS_CRIT)}</span>,
-    },
+    { key: 'balance', label: 'Stale Balance', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r.balance)}</span> },
+    { key: 'count', label: 'Stale Claims', filterType: 'number' },
+    { key: 'maxDosAge', label: 'Max DOS Age', filterType: 'number',
+      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.maxDosAge}d {flagVal(r.maxDosAge, T.STALE_DOS_WARN, T.STALE_DOS_CRIT)}</span> },
   ];
 
-  const DENIAL_CPT_COLS = [
+  const DENIAL_PLAN_CPT_COLS = [
     { key: 'cpt', label: 'CPT Code', filterType: 'text' },
-    { key: 'billedBalance', label: 'Billed Balance', filterType: 'number', render: (r) => fmt$(r.billedBalance) },
-    { key: 'deniedBalance', label: 'Denied Balance', filterType: 'number', render: (r) => <span style={{ color: 'var(--danger)' }}>{fmt$(r.deniedBalance)}</span> },
+    { key: 'plan', label: 'Plan', filterType: 'text' },
+    { key: 'carrier', label: 'Carrier', filterType: 'text' },
+    { key: 'deniedBalance', label: 'Denied $', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)' }}>{fmt$(r.deniedBalance)}</span> },
     { key: 'deniedCount', label: 'Denied Claims', filterType: 'number' },
-    {
-      key: 'denialRate', label: 'Denial Rate', filterType: 'number',
-      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.denialRate.toFixed(1)}% {flag(r.denialRate, T.DENIAL_RATE_WARN, T.DENIAL_RATE_CRIT)}</span>,
-    },
-    {
-      key: 'topCode', label: 'Top Denial Code', filterType: 'text',
-      render: (r) => r.topCode ? <span className="badge badge-yellow">{r.topCode}</span> : '—',
-    },
+    { key: 'planDenialRate', label: 'Plan Rate', filterType: 'number',
+      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {r.planDenialRate.toFixed(1)}% {flagVal(r.planDenialRate, T.DENIAL_RATE_WARN, T.DENIAL_RATE_CRIT)}
+      </span> },
+    { key: 'cptAvgRate', label: 'Avg Rate (CPT)', filterType: 'number',
+      render: (r) => `${r.cptAvgRate.toFixed(1)}%` },
+    { key: 'vsAvg', label: 'vs. CPT Avg', filterType: 'number',
+      render: (r) => <strong style={{ color: r.vsAvg > 0 ? 'var(--danger)' : 'var(--success)' }}>
+        {r.vsAvg > 0 ? '+' : ''}{r.vsAvg.toFixed(1)}%
+      </strong> },
   ];
 
   const DENIAL_CARRIER_COLS = [
     { key: 'carrier', label: 'Carrier', filterType: 'text' },
     { key: 'billedBalance', label: 'Billed Balance', filterType: 'number', render: (r) => fmt$(r.billedBalance) },
-    { key: 'deniedBalance', label: 'Denied Balance', filterType: 'number', render: (r) => <span style={{ color: 'var(--danger)' }}>{fmt$(r.deniedBalance)}</span> },
+    { key: 'deniedBalance', label: 'Denied Balance', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)' }}>{fmt$(r.deniedBalance)}</span> },
     { key: 'deniedCount', label: 'Denied Claims', filterType: 'number' },
-    {
-      key: 'denialRate', label: 'Denial Rate', filterType: 'number',
-      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.denialRate.toFixed(1)}% {flag(r.denialRate, T.DENIAL_RATE_WARN, T.DENIAL_RATE_CRIT)}</span>,
-    },
+    { key: 'denialRate', label: 'Denial Rate', filterType: 'number',
+      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {r.denialRate.toFixed(1)}% {flagVal(r.denialRate, T.DENIAL_RATE_WARN, T.DENIAL_RATE_CRIT)}
+      </span> },
   ];
 
   const REDENIAL_COLS = [
     { key: 'pathway', label: 'Pathway (First → Last Code)', filterType: 'text' },
-    { key: 'balance', label: 'Balance', filterType: 'number', render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r.balance)}</span> },
+    { key: 'balance', label: 'Denied Balance', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r.balance)}</span> },
     { key: 'count', label: 'Claims', filterType: 'number' },
   ];
 
   const HIGH_VALUE_COLS = [
-    { key: '_status', label: 'Status', filterType: 'multiselect', render: (r) => <span className={`badge ${hasDenialCode(r) ? 'badge-red' : 'badge-orange'}`}>{hasDenialCode(r) ? 'Denied' : r._status}</span> },
+    { key: '_status', label: 'Status', filterType: 'multiselect',
+      render: (r) => <span className={`badge ${hasDenialCode(r) ? 'badge-red' : 'badge-orange'}`}>{hasDenialCode(r) ? 'Denied' : r._status}</span> },
     { key: '_carrier', label: 'Carrier', filterType: 'text' },
     { key: 'InsurancePlanDescription', label: 'Plan', filterType: 'text' },
     { key: 'CPTCode', label: 'CPT', filterType: 'text' },
-    { key: '_balance', label: 'Balance', filterType: 'number', render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r._balance)}</span>, csvValue: (r) => r._balance?.toFixed(2) },
-    { key: '_dosAge', label: 'DOS Age', filterType: 'number', render: (r) => r._dosAge != null ? `${r._dosAge}d` : '—' },
+    { key: '_balance', label: 'Balance', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r._balance)}</span>,
+      csvValue: (r) => r._balance?.toFixed(2) },
+    { key: '_dosAge', label: 'DOS Age', filterType: 'number',
+      render: (r) => r._dosAge != null ? `${r._dosAge}d` : '—' },
     { key: 'MAD Aging Bucket', label: 'MAD Bucket', filterType: 'multiselect' },
-    { key: 'FirstDenialCode', label: 'Denial Code', filterType: 'text', render: (r) => r.FirstDenialCode && String(r.FirstDenialCode).trim() ? <span className="badge badge-yellow">{r.FirstDenialCode}</span> : '—' },
+    { key: 'FirstDenialCode', label: 'Denial Code', filterType: 'text',
+      render: (r) => r.FirstDenialCode && String(r.FirstDenialCode).trim()
+        ? <span className="badge badge-yellow">{r.FirstDenialCode}</span>
+        : '—' },
   ];
 
   const RESP_LAGGARD_COLS = [
     { key: 'carrier', label: 'Carrier', filterType: 'text' },
-    { key: 'balance', label: 'Billed Balance', filterType: 'number', render: (r) => fmt$(r.balance) },
-    { key: 'unrespondedBalance', label: 'Unresponded', filterType: 'number', render: (r) => <span style={{ color: 'var(--orange)' }}>{fmt$(r.unrespondedBalance)}</span> },
+    { key: 'unrespondedBalance', label: 'Unresponded $', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--orange)', fontWeight: 700 }}>{fmt$(r.unrespondedBalance)}</span> },
     { key: 'claimCount', label: 'Claims', filterType: 'number' },
-    {
-      key: 'responseRate', label: 'Response Rate', filterType: 'number',
-      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.responseRate.toFixed(1)}% {flag(r.responseRate, T.RESP_RATE_WARN, T.RESP_RATE_CRIT, true)}</span>,
-    },
+    { key: 'responseRate', label: 'Response Rate', filterType: 'number',
+      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {r.responseRate.toFixed(1)}% {flagVal(r.responseRate, T.RESP_RATE_WARN, T.RESP_RATE_CRIT, true)}
+      </span> },
   ];
 
-  const BILLING_LAG_COLS = [
+  const AGING_PLAN_CPT_COLS = [
+    { key: 'cpt', label: 'CPT Code', filterType: 'text' },
+    { key: 'plan', label: 'Plan', filterType: 'text' },
     { key: 'carrier', label: 'Carrier', filterType: 'text' },
-    { key: 'balance', label: 'Balance', filterType: 'number', render: (r) => fmt$(r.balance) },
-    { key: 'claimCount', label: 'Claims', filterType: 'number' },
-    {
-      key: 'avgBillingLag', label: 'Avg Billing Lag (DOS → Filed)', filterType: 'number',
-      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.avgBillingLag}d {flag(r.avgBillingLag, T.BILLING_LAG_WARN, T.BILLING_LAG_CRIT)}</span>,
-    },
-  ];
-
-  const CONCENTRATION_COLS = [
-    { key: 'carrier', label: 'Carrier', filterType: 'text' },
-    { key: 'balance', label: 'Total AR Balance', filterType: 'number', render: (r) => fmt$(r.balance) },
-    {
-      key: 'arShare', label: '% of Total AR', filterType: 'number',
-      render: (r) => <strong style={{ color: r.arShare >= 15 ? 'var(--danger)' : 'inherit' }}>{r.arShare.toFixed(1)}%</strong>,
-    },
-    {
-      key: 'denialRate', label: 'Denial Rate', filterType: 'number',
-      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{r.denialRate.toFixed(1)}% {flag(r.denialRate, T.DENIAL_RATE_WARN, T.DENIAL_RATE_CRIT)}</span>,
-    },
-    {
-      key: 'unrespondedRate', label: 'Unresponded Rate', filterType: 'number',
-      render: (r) => `${r.unrespondedRate.toFixed(1)}%`,
-    },
-    { key: 'claimCount', label: 'Claims', filterType: 'number' },
+    { key: 'agedBalance', label: 'Aged Balance', filterType: 'number',
+      render: (r) => <span style={{ color: 'var(--danger)', fontWeight: 700 }}>{fmt$(r.agedBalance)}</span> },
+    { key: 'agedCount', label: 'Aged Claims', filterType: 'number' },
+    { key: 'avgMad', label: 'Plan Avg MAD', filterType: 'number',
+      render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {r.avgMad}d {flagVal(r.avgMad, T.MAD_WARN, T.MAD_CRIT)}
+      </span> },
+    { key: 'carrierAvgMad', label: 'Carrier Avg MAD', filterType: 'number',
+      render: (r) => `${r.carrierAvgMad}d` },
+    { key: 'vsAvgPct', label: '% Above Carrier Avg', filterType: 'number',
+      render: (r) => <strong style={{ color: 'var(--danger)' }}>+{r.vsAvgPct}%</strong> },
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -415,18 +515,12 @@ export default function IssuesTab({ filteredData }) {
   return (
     <div className="section-gap">
 
-      {/* Issues legend */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-        <span>Thresholds:</span>
-        <span><span className="issue-flag issue-flag-crit">Critical</span> MAD/File Age &gt;{T.MAD_CRIT}d / Denial Rate &gt;{T.DENIAL_RATE_CRIT}% / Response Rate &lt;{T.RESP_RATE_CRIT}% / Billing Lag &gt;{T.BILLING_LAG_CRIT}d</span>
-        <span><span className="issue-flag issue-flag-warn">Warning</span> MAD/File Age &gt;{T.MAD_WARN}d / Denial Rate &gt;{T.DENIAL_RATE_WARN}% / Response Rate &lt;{T.RESP_RATE_WARN}% / Billing Lag &gt;{T.BILLING_LAG_WARN}d</span>
-        <span style={{ marginLeft: 'auto', fontStyle: 'italic' }}>Click any row to drill into claims</span>
-      </div>
+      <ThresholdPanel T={T} onChange={setT} />
 
       {/* 1. Aged Billed AR — By Carrier */}
       <IssueSection
         title="Aged Billed AR — By Carrier"
-        subtitle={`MAD age or file date age flagged on carriers with ≥${T.MIN_CLAIMS} claims`}
+        subtitle={`Aged claims only (MAD ≥${T.MAD_WARN}d or DOS ≥${T.DOS_WARN}d or File Age ≥${T.FILE_AGE_WARN}d)`}
         alertCount={agedCarrierAlerts}
       >
         <SortableTable
@@ -436,9 +530,9 @@ export default function IssuesTab({ filteredData }) {
           exportFilename="issues-aged-carriers.csv"
           emptyMessage="No carriers with aged billed AR in current filter."
           onRowClick={(row) => openDrill(
-            billedRows.filter((r) => r._carrier === row.carrier),
+            billedRows.filter((r) => r._carrier === row.carrier && isAgedClaim(r, T)),
             row.carrier,
-            `Billed AR — Avg MAD: ${row.avgMadAge != null ? row.avgMadAge + 'd' : '—'} · Avg File Age: ${row.avgFileAge != null ? row.avgFileAge + 'd' : '—'}`,
+            `Aged Billed AR · Avg MAD ${row.avgMadAge != null ? row.avgMadAge + 'd' : '—'} · Avg File Age ${row.avgFileAge != null ? row.avgFileAge + 'd' : '—'}`,
           )}
         />
       </IssueSection>
@@ -446,7 +540,7 @@ export default function IssuesTab({ filteredData }) {
       {/* 2. Aged Billed AR — By Plan */}
       <IssueSection
         title="Aged Billed AR — By Plan"
-        subtitle={`Plan-level MAD and file date aging for plans with ≥${T.MIN_CLAIMS} claims`}
+        subtitle={`Aged claims only (MAD ≥${T.MAD_WARN}d or DOS ≥${T.DOS_WARN}d or File Age ≥${T.FILE_AGE_WARN}d)`}
         alertCount={agedPlanAlerts}
       >
         <SortableTable
@@ -456,11 +550,12 @@ export default function IssuesTab({ filteredData }) {
           exportFilename="issues-aged-plans.csv"
           emptyMessage="No plans with aged billed AR in current filter."
           onRowClick={(row) => {
-            const pRows = billedRows.filter((r) => {
-              const p = String(r.InsurancePlanDescription || '').trim() || '(Unknown)';
-              return p === row.plan;
-            });
-            openDrill(pRows, row.plan, `${row.carrier} — Billed AR`);
+            const plan = row.plan;
+            openDrill(
+              billedRows.filter((r) => (String(r.InsurancePlanDescription || '').trim() || '(Unknown)') === plan && isAgedClaim(r, T)),
+              plan,
+              `${row.carrier} — Aged Billed AR`,
+            );
           }}
         />
       </IssueSection>
@@ -476,7 +571,7 @@ export default function IssuesTab({ filteredData }) {
           data={staleUnbilled}
           pageSize={15}
           exportFilename="issues-stale-unbilled.csv"
-          emptyMessage={`No unbilled claims older than ${T.STALE_DOS_WARN} days.`}
+          emptyMessage={T.STALE_DOS_WARN <= 0 ? 'Stale unbilled threshold disabled.' : `No unbilled claims older than ${T.STALE_DOS_WARN} days.`}
           onRowClick={(row) => openDrill(
             unbilledRows.filter((r) => r._carrier === row.carrier && (r._dosAge || 0) >= T.STALE_DOS_WARN),
             `${row.carrier} — Stale Unbilled`,
@@ -485,27 +580,30 @@ export default function IssuesTab({ filteredData }) {
         />
       </IssueSection>
 
-      {/* 4. Denial Rate — By CPT Code */}
+      {/* 4. Denial Rate Outliers — Plan × CPT */}
       <IssueSection
-        title="Denial Rate Outliers — By CPT Code"
-        subtitle={`CPT codes with denial rate ≥ ${T.DENIAL_RATE_WARN}% vs billed balance`}
-        alertCount={cptDenialAlerts}
+        title="Denial Rate Outliers — Plan × CPT"
+        subtitle={`Plans with denial rate ≥ ${T.DENIAL_RATE_WARN}% for a CPT, vs. the average denial rate for that CPT across all plans`}
+        alertCount={planCptDenialAlerts}
       >
         <SortableTable
-          columns={DENIAL_CPT_COLS}
-          data={denialByCpt}
-          pageSize={15}
-          exportFilename="issues-denial-cpt.csv"
-          emptyMessage={`No CPT codes with denial rate ≥ ${T.DENIAL_RATE_WARN}%.`}
+          columns={DENIAL_PLAN_CPT_COLS}
+          data={denialByPlanCpt}
+          pageSize={20}
+          exportFilename="issues-denial-plan-cpt.csv"
+          emptyMessage={T.DENIAL_RATE_WARN <= 0 ? 'Denial rate threshold disabled.' : `No plan × CPT combinations with denial rate ≥ ${T.DENIAL_RATE_WARN}%.`}
           onRowClick={(row) => openDrill(
-            denialRows.filter((r) => String(r.CPTCode || '').trim() === row.cpt),
-            `CPT ${row.cpt} — Denied Claims`,
-            `${row.denialRate.toFixed(1)}% denial rate · Top code: ${row.topCode || 'N/A'}`,
+            denialRows.filter((r) => {
+              const p = String(r.InsurancePlanDescription || '').trim() || '(Unknown)';
+              return p === row.plan && String(r.CPTCode || '').trim() === row.cpt;
+            }),
+            `${row.plan} — CPT ${row.cpt}`,
+            `${row.planDenialRate.toFixed(1)}% denial rate (CPT avg: ${row.cptAvgRate.toFixed(1)}%)`,
           )}
         />
       </IssueSection>
 
-      {/* 5. Denial Rate — By Carrier */}
+      {/* 5. Denial Rate Outliers — By Carrier */}
       <IssueSection
         title="Denial Rate Outliers — By Carrier"
         subtitle={`Carriers with denial rate ≥ ${T.DENIAL_RATE_WARN}% of billed balance`}
@@ -516,7 +614,7 @@ export default function IssuesTab({ filteredData }) {
           data={denialByCarrier}
           pageSize={15}
           exportFilename="issues-denial-carriers.csv"
-          emptyMessage={`No carriers with denial rate ≥ ${T.DENIAL_RATE_WARN}%.`}
+          emptyMessage={T.DENIAL_RATE_WARN <= 0 ? 'Denial rate threshold disabled.' : `No carriers with denial rate ≥ ${T.DENIAL_RATE_WARN}%.`}
           onRowClick={(row) => openDrill(
             denialRows.filter((r) => r._carrier === row.carrier),
             `${row.carrier} — Denied Claims`,
@@ -525,10 +623,10 @@ export default function IssuesTab({ filteredData }) {
         />
       </IssueSection>
 
-      {/* 6. Re-denied Claims */}
+      {/* 6. Re-denials */}
       <IssueSection
         title="Escalating Re-denials"
-        subtitle="Claims denied under a different code than original — indicates unresolved issues"
+        subtitle="Claims denied under a different code than the first denial — indicates unresolved dispute cycles"
         alertCount={redenials.length}
       >
         <SortableTable
@@ -540,7 +638,7 @@ export default function IssuesTab({ filteredData }) {
           onRowClick={(row) => openDrill(
             denialRows.filter((r) =>
               String(r.FirstDenialCode || '').trim() === row.firstCode &&
-              String(r.LastDenialCode || '').trim() === row.lastCode,
+              String(r.LastDenialCode  || '').trim() === row.lastCode
             ),
             `Pathway: ${row.pathway}`,
             `${row.count} re-denied claims`,
@@ -551,7 +649,7 @@ export default function IssuesTab({ filteredData }) {
       {/* 7. High-Value Exposed Claims */}
       <IssueSection
         title={`High-Value Exposed Claims (≥ ${fmt$(T.HIGH_VALUE)})`}
-        subtitle="Individual unresponded or denied claims above balance threshold — highest revenue recovery priority"
+        subtitle="Unresponded or denied claims above balance threshold — highest individual revenue recovery priority"
         alertCount={highValueExposed.length}
       >
         <SortableTable
@@ -559,7 +657,7 @@ export default function IssuesTab({ filteredData }) {
           data={highValueExposed}
           pageSize={25}
           exportFilename="issues-high-value.csv"
-          emptyMessage={`No unresponded or denied claims ≥ ${fmt$(T.HIGH_VALUE)}.`}
+          emptyMessage={T.HIGH_VALUE <= 0 ? 'High-value threshold disabled.' : `No unresponded or denied claims ≥ ${fmt$(T.HIGH_VALUE)}.`}
           onRowClick={(row) => openDrill([row], `${row._carrier} — ${row.CPTCode}`, fmt$(row._balance))}
         />
       </IssueSection>
@@ -567,7 +665,7 @@ export default function IssuesTab({ filteredData }) {
       {/* 8. Response Rate Laggards */}
       <IssueSection
         title="Carrier Response Rate Laggards"
-        subtitle={`Carriers where response rate is below ${T.RESP_RATE_WARN}%`}
+        subtitle={`Carriers where response rate < ${T.RESP_RATE_WARN}% — showing unresponded balance only`}
         alertCount={respAlerts}
       >
         <SortableTable
@@ -575,56 +673,45 @@ export default function IssuesTab({ filteredData }) {
           data={responseLaggards}
           pageSize={15}
           exportFilename="issues-response-rate.csv"
-          emptyMessage={`All carriers have response rate ≥ ${T.RESP_RATE_WARN}%.`}
+          emptyMessage={T.RESP_RATE_WARN <= 0 ? 'Response rate threshold disabled.' : `All carriers have response rate ≥ ${T.RESP_RATE_WARN}%.`}
           onRowClick={(row) => openDrill(
-            billedRows.filter((r) => r._carrier === row.carrier),
-            `${row.carrier} — Billed AR`,
+            billedRows.filter((r) => r._carrier === row.carrier && r._status !== 'Responded'),
+            `${row.carrier} — Unresponded AR`,
             `${row.responseRate.toFixed(1)}% response rate`,
           )}
         />
       </IssueSection>
 
-      {/* 9. Billing Lag */}
+      {/* 9. Aging Outliers — Plan × CPT within carrier */}
       <IssueSection
-        title="Billing Lag — DOS to Initial File Date"
-        subtitle={`Carriers with average lag ≥ ${T.BILLING_LAG_WARN} days — indicates slow billing workflow`}
-        alertCount={lagAlerts}
+        title="Aging Outliers — Plan × CPT (vs. Carrier Average)"
+        subtitle="Plans whose avg MAD age for a specific CPT is higher than the carrier average for that CPT — showing aged claims only"
+        alertCount={agingOutlierAlerts}
       >
         <SortableTable
-          columns={BILLING_LAG_COLS}
-          data={billingLag}
-          pageSize={15}
-          exportFilename="issues-billing-lag.csv"
-          emptyMessage={`No carriers with billing lag ≥ ${T.BILLING_LAG_WARN} days.`}
-          onRowClick={(row) => openDrill(
-            billedRows.filter((r) => r._carrier === row.carrier),
-            `${row.carrier} — Billed AR`,
-            `Avg billing lag: ${row.avgBillingLag}d`,
-          )}
+          columns={AGING_PLAN_CPT_COLS}
+          data={agingByPlanCpt}
+          pageSize={20}
+          exportFilename="issues-aging-plan-cpt.csv"
+          emptyMessage="No plan × CPT aging outliers found."
+          onRowClick={(row) => {
+            const plan    = row.plan;
+            const cpt     = row.cpt;
+            const carrier = row.carrier;
+            openDrill(
+              billedRows.filter((r) =>
+                (String(r.InsurancePlanDescription || '').trim() || '(Unknown)') === plan &&
+                String(r.CPTCode || '').trim() === cpt &&
+                r._carrier === carrier &&
+                isAgedClaim(r, T)
+              ),
+              `${plan} — CPT ${cpt}`,
+              `+${row.vsAvgPct}% above ${carrier} avg MAD for this CPT`,
+            );
+          }}
         />
       </IssueSection>
 
-      {/* 10. Carrier Concentration Risk */}
-      <IssueSection
-        title="Carrier Concentration Risk"
-        subtitle="Carriers with ≥ 5% of total AR — cross-referenced with denial and unresponded rates"
-        alertCount={concAlerts}
-      >
-        <SortableTable
-          columns={CONCENTRATION_COLS}
-          data={concentrationRisk}
-          pageSize={15}
-          exportFilename="issues-concentration.csv"
-          emptyMessage="No concentration data."
-          onRowClick={(row) => openDrill(
-            filteredData.filter((r) => r._carrier === row.carrier),
-            `${row.carrier} — All AR`,
-            `${row.arShare.toFixed(1)}% of total AR`,
-          )}
-        />
-      </IssueSection>
-
-      {/* Drill panel */}
       {drill && (
         <DrillAnalyticsPanel
           title={drill.title}
