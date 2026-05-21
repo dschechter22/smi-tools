@@ -7,6 +7,7 @@ import DenialAnalysisTab from './tabs/DenialAnalysisTab.jsx';
 import ReDenialTab from './tabs/ReDenialTab.jsx';
 import LocationComparisonTab from './tabs/LocationComparisonTab.jsx';
 import PatientInsuranceSplitTab from './tabs/PatientInsuranceSplitTab.jsx';
+import AtbAnalysisTab from './tabs/AtbAnalysisTab.jsx';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -16,11 +17,14 @@ const TABS = [
   { id: 'redenial', label: 'Re-denial' },
   { id: 'location', label: 'Location Comparison' },
   { id: 'pt-ins-split', label: 'Pt vs Ins Split' },
+  { id: 'atb', label: 'ATB Analysis' },
 ];
 
 export default function Dashboard({ rawData, columnMeta, fileName, onReset, benchmarkMethod, onBenchmarkMethodChange }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [filters, setFilters] = useState(() => buildDefaultFilters());
+  const [atbRawRows, setAtbRawRows] = useState(null);
+  const [atbFileName, setAtbFileName] = useState('');
 
   const filteredData = useMemo(
     () => applyFilters(rawData, filters),
@@ -53,6 +57,14 @@ export default function Dashboard({ rawData, columnMeta, fileName, onReset, benc
         return <LocationComparisonTab filteredData={filteredData} />;
       case 'pt-ins-split':
         return <PatientInsuranceSplitTab filteredData={filteredData} />;
+      case 'atb':
+        return (
+          <AtbAnalysisTab
+            atbRawRows={atbRawRows}
+            atbFileName={atbFileName}
+            onAtbDataLoaded={(rows, name) => { setAtbRawRows(rows); setAtbFileName(name || ''); }}
+          />
+        );
       default:
         return null;
     }
