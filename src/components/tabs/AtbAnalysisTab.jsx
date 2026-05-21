@@ -424,7 +424,7 @@ function AtbUploadCard({ onAtbDataLoaded }) {
 
       <div className="upload-card" style={{ maxWidth: 480, padding: '32px 40px' }}>
         <h2 style={{ fontSize: 18 }}>Load ATB File</h2>
-        <p>Upload an ATB Excel file (.xlsb, .xlsx, or .xls). All processing is local — no data leaves your device.</p>
+        <p>Upload an ATB CSV file (export the Debit sheet from Excel as CSV). All processing is local — no data leaves your device.</p>
 
         <div
           className={`upload-dropzone ${dragging ? 'drag-over' : ''}`}
@@ -439,12 +439,12 @@ function AtbUploadCard({ onAtbDataLoaded }) {
           <input
             ref={inputRef}
             type="file"
-            accept=".xlsb,.xlsx,.xls"
+            accept=".csv,.xlsb,.xlsx,.xls"
             onChange={onInputChange}
           />
           <div className="upload-icon">📂</div>
           <h3>Drop ATB file here or click to browse</h3>
-          <p>Supported: Excel (.xlsb / .xlsx / .xls)</p>
+          <p>Supported: CSV (recommended) · .xlsb / .xlsx / .xls</p>
           <button
             className="btn btn-primary"
             onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}

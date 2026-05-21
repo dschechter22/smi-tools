@@ -3,8 +3,8 @@ import AtbParseWorker from './atb.parse.worker.js?worker';
 export function parseAtbFile(file, onProgress) {
   return new Promise((resolve, reject) => {
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!['xlsx', 'xls', 'xlsb'].includes(ext)) {
-      reject(new Error('ATB files must be Excel (.xlsb, .xlsx, or .xls).'));
+    if (!['xlsx', 'xls', 'xlsb', 'csv'].includes(ext)) {
+      reject(new Error('ATB files must be .csv, .xlsb, .xlsx, or .xls.'));
       return;
     }
     const worker = new AtbParseWorker();
@@ -18,8 +18,15 @@ export function parseAtbFile(file, onProgress) {
       else if (type === 'error') { worker.terminate(); reject(new Error(payload.message)); }
     };
     worker.onerror = (err) => { worker.terminate(); reject(new Error(err.message || 'Worker error')); };
-    file.arrayBuffer().then(buffer => {
-      worker.postMessage({ file: new Uint8Array(buffer), ext }, [buffer]);
-    }).catch(reject);
+
+    if (ext === 'csv') {
+      // Pass File object directly — PapaParse uses chunked FileReader for true streaming
+      worker.postMessage({ file, ext });
+    } else {
+      // Pass ArrayBuffer for XLSX/XLSB
+      file.arrayBuffer().then(buffer => {
+        worker.postMessage({ file: new Uint8Array(buffer), ext }, [buffer]);
+      }).catch(reject);
+    }
   });
 }
