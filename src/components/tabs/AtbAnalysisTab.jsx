@@ -113,6 +113,7 @@ function AtbFilterBar({ filters, onFilterChange, onClearAll, columnMeta }) {
         <MultiSelect label="State" options={columnMeta['Location State'] || []} selected={filters.locationState} onChange={(v) => set('locationState', v)} />
         <MultiSelect label="Insurance Type" options={columnMeta['InsuranceType'] || []} selected={filters.insuranceType} onChange={(v) => set('insuranceType', v)} />
         <MultiSelect label="DOS Bucket" options={columnMeta['_dosBucket'] || STANDARD_BUCKET_ORDER} selected={filters.dosBucket} onChange={(v) => set('dosBucket', v)} />
+        <MultiSelect label="MAD Bucket" options={columnMeta['MAD Aging Bucket'] || []} selected={filters.madBucket} onChange={(v) => set('madBucket', v)} />
         <MultiSelect label="CPT Code" options={columnMeta['CPTCode'] || []} selected={filters.cptCode} onChange={(v) => set('cptCode', v)} />
         <MultiSelect label="Modality" options={columnMeta['Modality'] || []} selected={filters.modality} onChange={(v) => set('modality', v)} />
         <MultiSelect label="Action Group" options={columnMeta['New Action Grouping'] || []} selected={filters.actionGroup} onChange={(v) => set('actionGroup', v)} />
