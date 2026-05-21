@@ -8,7 +8,7 @@ self.onmessage = async (e) => {
     post('progress', { pct: 10, status: 'Reading file…' });
     if (!['xlsx', 'xls', 'xlsb'].includes(ext)) throw new Error('ATB files must be Excel (.xlsb, .xlsx, or .xls).');
 
-    const wb = XLSX.read(file, { type: 'array', cellDates: true });
+    const wb = XLSX.read(file, { type: 'array' });
     post('progress', { pct: 40, status: `Found sheets: ${wb.SheetNames.join(', ')}` });
 
     // Case-insensitive match for "Debit"
