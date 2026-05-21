@@ -117,21 +117,6 @@ function AtbFilterBar({ filters, onFilterChange, onClearAll, columnMeta }) {
         <MultiSelect label="Work List" options={columnMeta['Work List'] || []} selected={filters.workList} onChange={(v) => set('workList', v)} />
         <MultiSelect label="$ Tier" options={columnMeta['$ Tier'] || []} selected={filters.dollarTier} onChange={(v) => set('dollarTier', v)} />
 
-        <div className="filter-chip-divider" />
-
-        <label className={`filter-toggle-chip${filters.nonPiOnly ? ' active' : ''}`}>
-          <input type="checkbox" checked={filters.nonPiOnly} onChange={(e) => onFilterChange({ ...filters, nonPiOnly: e.target.checked })} />
-          Non-PI only
-        </label>
-        <label className={`filter-toggle-chip${filters.excludeNonPayer ? ' active' : ''}`}>
-          <input type="checkbox" checked={filters.excludeNonPayer} onChange={(e) => onFilterChange({ ...filters, excludeNonPayer: e.target.checked })} />
-          Excl. non-payer
-        </label>
-        <label className={`filter-toggle-chip${filters.excludeCredits ? ' active' : ''}`}>
-          <input type="checkbox" checked={filters.excludeCredits} onChange={(e) => onFilterChange({ ...filters, excludeCredits: e.target.checked })} />
-          Excl. credits
-        </label>
-
         <div style={{ flex: 1 }} />
         {activeCount > 0 && (
           <>

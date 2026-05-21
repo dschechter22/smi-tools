@@ -153,18 +153,11 @@ export function buildAtbDefaultFilters() {
     workList: [],
     dollarTier: [],
     cptCode: [],
-    excludeNonPayer: true,
-    nonPiOnly: true,
-    excludeCredits: true,
   };
 }
 
 export function applyAtbFilters(data, filters) {
   return data.filter((row) => {
-    if (filters.excludeCredits && row._balance <= 0) return false;
-    if (filters.excludeNonPayer && isNonPayerCarrier(row._carrier)) return false;
-    if (filters.nonPiOnly && row._piField !== 'Non PI') return false;
-
     if (filters.status.length > 0 && !filters.status.includes(row._status)) return false;
     if (filters.carrier.length > 0 && !filters.carrier.includes(row._carrier)) return false;
     if (filters.insuranceType.length > 0 && !filters.insuranceType.includes(row.InsuranceType)) return false;
@@ -189,7 +182,6 @@ export function countAtbActiveFilters(filters) {
   for (const key of multiselects) {
     if (filters[key] && filters[key].length > 0) count++;
   }
-  if (filters.nonPiOnly) count++;
   return count;
 }
 
