@@ -3,6 +3,8 @@ import Papa from 'papaparse';
 
 function post(type, payload) { self.postMessage({ type, ...payload }); }
 
+const CHUNK_SIZE = 10000;
+
 self.onmessage = async (e) => {
   const { file, ext } = e.data;
   try {
@@ -25,8 +27,10 @@ function parseCsv(file) {
   return new Promise((resolve, reject) => {
     post('progress', { pct: 2, status: 'Starting CSV parse…' });
     const totalBytes = file.size;
-    const rawRows = [];
     let rowCount = 0;
+    let totalKept = 0;
+    let pending = [];
+    let sampleKeys = null;
 
     Papa.parse(file, {
       header: true,
@@ -34,26 +38,43 @@ function parseCsv(file) {
       step(result) {
         const row = result.data;
 
-        // Filter out PI rows at load time — user confirmed non-PI only
+        // Capture column names from first row
+        if (sampleKeys === null) {
+          sampleKeys = Object.keys(row).slice(0, 8).join(', ');
+        }
+
+        rowCount++;
+
+        // Filter out PI rows at load time
         const piVal = String(row['PI/Non PI'] || '').trim().toUpperCase();
         if (piVal === 'PI') return;
 
-        rawRows.push(row);
-        rowCount++;
+        pending.push(row);
+        totalKept++;
+
+        // Flush chunk — frees worker memory so it never holds the full dataset
+        if (pending.length >= CHUNK_SIZE) {
+          post('chunk', { rows: pending, kept: totalKept });
+          pending = [];
+        }
 
         if (rowCount % 10000 === 0) {
-          const pct = Math.min(92, Math.round((result.meta.cursor / totalBytes) * 90) + 2);
-          post('progress', { pct, status: `Parsed ${rowCount.toLocaleString()} rows…` });
+          const pct = Math.min(90, Math.round((result.meta.cursor / totalBytes) * 90) + 2);
+          post('progress', { pct, status: `Parsed ${rowCount.toLocaleString()} rows, kept ${totalKept.toLocaleString()}…` });
         }
       },
       complete() {
-        if (rawRows.length === 0) {
-          reject(new Error('No rows found after parsing. Check that the file has a "PI/Non PI" column and Non-PI data.'));
+        // Flush remainder
+        if (pending.length > 0) {
+          post('chunk', { rows: pending, kept: totalKept });
+          pending = [];
+        }
+        if (totalKept === 0) {
+          reject(new Error('No Non-PI rows found. Check that the file has a "PI/Non PI" column.'));
           return;
         }
-        const sampleKeys = Object.keys(rawRows[0]).slice(0, 8).join(', ');
-        post('progress', { pct: 96, status: `Loaded ${rawRows.length.toLocaleString()} rows` });
-        post('complete', { rows: rawRows, sheetName: 'CSV', sampleKeys });
+        post('progress', { pct: 96, status: `Done — ${totalKept.toLocaleString()} rows loaded` });
+        post('complete', { total: totalKept, sheetName: 'CSV', sampleKeys });
         resolve();
       },
       error(err) {
@@ -79,30 +100,33 @@ async function parseExcel(file, ext) {
   const sheet = wb.Sheets[targetName];
   if (!sheet) throw new Error(`Sheet "${targetName}" could not be loaded. Available: ${sheetNames.join(', ')}`);
 
-  const ref = sheet['!ref'] || (sheet['!data'] ? `dense(${sheet['!data'].length}r)` : 'none');
-  post('progress', { pct: 60, status: `Parsing "${targetName}" — range: ${ref}` });
+  post('progress', { pct: 60, status: `Converting rows…` });
 
   const rawArrays = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-  post('progress', { pct: 80, status: `Raw rows: ${rawArrays.length}, cols: ${rawArrays[0]?.length ?? 0}` });
-
-  if (rawArrays.length < 2) {
-    throw new Error(`Sheet "${targetName}" returned ${rawArrays.length} rows (range=${ref}).`);
-  }
+  if (rawArrays.length < 2) throw new Error(`Sheet "${targetName}" returned ${rawArrays.length} rows.`);
 
   const headers = rawArrays[0].map(h => String(h == null ? '' : h).trim());
-  const rawRows = rawArrays.slice(1)
-    .filter(arr => arr.some(v => v !== ''))
-    .map(arr => {
-      const obj = {};
-      headers.forEach((h, i) => { obj[h] = arr[i] ?? ''; });
-      return obj;
-    });
+  const sampleKeys = headers.slice(0, 8).join(', ');
+  let kept = 0;
 
-  if (rawRows.length === 0) {
-    throw new Error(`Sheet "${targetName}" has headers but no data rows. Headers: ${headers.slice(0, 6).join(', ')}`);
+  post('progress', { pct: 75, status: `Transferring ${(rawArrays.length - 1).toLocaleString()} rows…` });
+
+  // Send in chunks so postMessage never has to clone the full array at once
+  for (let i = 1; i < rawArrays.length; i += CHUNK_SIZE) {
+    const chunk = [];
+    for (let j = i; j < Math.min(i + CHUNK_SIZE, rawArrays.length); j++) {
+      const arr = rawArrays[j];
+      if (!arr.some(v => v !== '')) continue;
+      const obj = {};
+      headers.forEach((h, k) => { obj[h] = arr[k] ?? ''; });
+      chunk.push(obj);
+      kept++;
+    }
+    if (chunk.length > 0) post('chunk', { rows: chunk, kept });
+    const pct = Math.min(94, Math.round(75 + ((i / rawArrays.length) * 20)));
+    post('progress', { pct, status: `Transferred ${kept.toLocaleString()} rows…` });
   }
 
-  const sampleKeys = headers.slice(0, 8).join(', ');
-  post('progress', { pct: 95, status: `Loaded ${rawRows.length.toLocaleString()} rows` });
-  post('complete', { rows: rawRows, sheetName: targetName, sampleKeys });
+  post('progress', { pct: 96, status: `Done — ${kept.toLocaleString()} rows loaded` });
+  post('complete', { total: kept, sheetName: targetName, sampleKeys });
 }

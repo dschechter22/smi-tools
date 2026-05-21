@@ -373,7 +373,7 @@ function AtbUploadCard({ onAtbDataLoaded }) {
     setStatusText('Starting…');
     try {
       const { rows, sheetName, sampleKeys } = await parseAtbFile(file, (pct, status) => {
-        setProgress(pct);
+        if (pct !== null) setProgress(pct);
         if (status) setStatusText(status);
       });
       if (rows.length === 0) {
