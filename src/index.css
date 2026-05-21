@@ -874,6 +874,12 @@ tbody tr:nth-child(even):hover td { background: #f0f4f8; }
   letter-spacing: -0.3px;
 }
 
+.summary-item .si-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 .recharts-tooltip-wrapper { font-size: 13px; }
 
 /* Column filter row */

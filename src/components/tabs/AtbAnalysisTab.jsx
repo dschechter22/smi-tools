@@ -11,6 +11,7 @@ import UnbilledTab from '../atb/UnbilledTab.jsx';
 import BilledArTab from '../atb/BilledArTab.jsx';
 import AtbDenialsTab from '../atb/AtbDenialsTab.jsx';
 import PayerAnalysisTab from '../atb/PayerAnalysisTab.jsx';
+import OverviewTab from '../atb/OverviewTab.jsx';
 import { fmt$ } from '../../utils/format.js';
 import { parseAtbFile } from '../../utils/parseAtbFile.js';
 
@@ -19,6 +20,7 @@ const STANDARD_BUCKET_ORDER = [
 ];
 
 const ATB_TABS = [
+  { id: 'overview', label: 'Overview' },
   { id: 'unbilled', label: 'Unbilled AR' },
   { id: 'billed', label: 'Billed AR' },
   { id: 'denials', label: 'Denials' },
@@ -220,7 +222,7 @@ function AtbUploadCard({ onAtbDataLoaded }) {
 
 export default function AtbAnalysisTab({ atbRawRows, atbFileName, onAtbDataLoaded }) {
   const [filters, setFilters] = useState(() => buildAtbDefaultFilters());
-  const [activeTab, setActiveTab] = useState('unbilled');
+  const [activeTab, setActiveTab] = useState('overview');
 
   const enrichedData = useMemo(
     () => (atbRawRows ? enrichAtbRows(atbRawRows) : []),
@@ -246,11 +248,12 @@ export default function AtbAnalysisTab({ atbRawRows, atbFileName, onAtbDataLoade
 
   function renderTab() {
     switch (activeTab) {
+      case 'overview': return <OverviewTab filteredData={filteredData} />;
       case 'unbilled': return <UnbilledTab filteredData={filteredData} totalData={enrichedData} />;
-      case 'billed':  return <BilledArTab filteredData={filteredData} />;
-      case 'denials': return <AtbDenialsTab filteredData={filteredData} />;
-      case 'payer':   return <PayerAnalysisTab filteredData={filteredData} />;
-      default:        return null;
+      case 'billed':   return <BilledArTab filteredData={filteredData} />;
+      case 'denials':  return <AtbDenialsTab filteredData={filteredData} />;
+      case 'payer':    return <PayerAnalysisTab filteredData={filteredData} />;
+      default:         return null;
     }
   }
 

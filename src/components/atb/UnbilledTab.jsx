@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { buildBucketBreakdown, buildKeyBreakdown, STANDARD_BUCKET_ORDER } from '../../utils/atbCalculations.js';
+import { buildBucketBreakdown, buildKeyBreakdown, STANDARD_BUCKET_ORDER, BALANCE_TIER_ORDER } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
 import DrillDownPanel from '../DrillDownPanel.jsx';
 import { fmt$, fmtPct } from '../../utils/format.js';
@@ -15,9 +15,10 @@ const AGING_COLUMNS = [
 ];
 
 const TIER_COLUMNS = [
-  { key: 'tier', label: 'Dollar Tier', filterType: 'text' },
+  { key: 'bucket', label: 'Dollar Tier', filterType: 'text' },
   { key: 'balance', label: 'Balance', filterType: 'number', render: (r) => fmt$(r.balance) },
   { key: 'count', label: 'Claims', filterType: 'number' },
+  { key: 'pct', label: '% of Unbilled', filterType: 'number', render: (r) => fmtPct(r.pct) },
 ];
 
 const CARRIER_COLUMNS = [
@@ -56,7 +57,7 @@ const DRILL_COLUMNS = [
     render: (r) => r._dosAge != null ? `${r._dosAge}d` : '—',
   },
   { key: '_unbilledDosBucket', label: 'Unbilled Bucket', filterType: 'multiselect' },
-  { key: '$ Tier', label: '$ Tier', filterType: 'multiselect' },
+  { key: '_balanceTier', label: 'Balance Tier', filterType: 'multiselect' },
   { key: 'Location State', label: 'State', filterType: 'multiselect' },
 ];
 
@@ -88,7 +89,7 @@ export default function UnbilledTab({ filteredData, totalData }) {
   );
 
   const tierData = useMemo(
-    () => buildKeyBreakdown(unbilledRows, (r) => r['$ Tier'], 'tier'),
+    () => buildBucketBreakdown(unbilledRows, '_balanceTier', BALANCE_TIER_ORDER),
     [unbilledRows]
   );
 
@@ -123,7 +124,7 @@ export default function UnbilledTab({ filteredData, totalData }) {
     if (!drillRow || !drillType) return [];
     switch (drillType) {
       case 'bucket': return unbilledRows.filter((r) => r._unbilledDosBucket === drillRow.bucket);
-      case 'tier': return unbilledRows.filter((r) => r['$ Tier'] === drillRow.tier);
+      case 'tier': return unbilledRows.filter((r) => r._balanceTier === drillRow.bucket);
       case 'carrier': return unbilledRows.filter((r) => r._carrier === drillRow.carrier);
       case 'cpt': return unbilledRows.filter((r) => r.CPTCode === drillRow.cpt);
       default: return [];
@@ -144,7 +145,7 @@ export default function UnbilledTab({ filteredData, totalData }) {
     if (!drillRow || !drillType) return '';
     switch (drillType) {
       case 'bucket': return drillRow.bucket;
-      case 'tier': return drillRow.tier;
+      case 'tier': return drillRow.bucket;
       case 'carrier': return drillRow.carrier;
       case 'cpt': return drillRow.cpt;
       default: return '';

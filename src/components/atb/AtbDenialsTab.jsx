@@ -8,6 +8,7 @@ import {
   buildBucketBreakdown,
   buildDenialPathways,
   STANDARD_BUCKET_ORDER,
+  hasDenialCode,
 } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
 import DrillDownPanel from '../DrillDownPanel.jsx';
@@ -347,7 +348,7 @@ export default function AtbDenialsTab({ filteredData }) {
 
   // Partition rows
   const denialRows = useMemo(
-    () => filteredData.filter((r) => r.FirstDenialCode && String(r.FirstDenialCode).trim() !== ''),
+    () => filteredData.filter((r) => hasDenialCode(r)),
     [filteredData],
   );
 

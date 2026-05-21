@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import {
-  buildBucketBreakdown, buildPayerPerformance, STANDARD_BUCKET_ORDER,
+  buildBucketBreakdown, buildPayerPerformance, STANDARD_BUCKET_ORDER, hasDenialCode,
 } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
 import DrillDownPanel from '../DrillDownPanel.jsx';
@@ -180,7 +180,7 @@ const DRILL_CLAIM_COLS = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function isBilledAr(row) {
-  return !row._isUnbilled && !(row.FirstDenialCode && String(row.FirstDenialCode).trim() !== '');
+  return !row._isUnbilled && !hasDenialCode(row);
 }
 
 function drillTitle(drillRow, drillType) {

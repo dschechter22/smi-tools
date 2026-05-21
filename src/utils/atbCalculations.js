@@ -72,6 +72,26 @@ function unbilledDosBucket(days) {
   return '61+';
 }
 
+export const BALANCE_TIER_ORDER = [
+  '$0-$25', '$25-$50', '$50-$100', '$100-$250', '$250-$500',
+  '$500-$1,000', '$1,000-$1,500', '$1,500-$2,000', '$2,000-$2,500',
+  '$2,500-$5,000', '$5,000+',
+];
+
+export function balanceTier(bal) {
+  if (bal < 25)   return '$0-$25';
+  if (bal < 50)   return '$25-$50';
+  if (bal < 100)  return '$50-$100';
+  if (bal < 250)  return '$100-$250';
+  if (bal < 500)  return '$250-$500';
+  if (bal < 1000) return '$500-$1,000';
+  if (bal < 1500) return '$1,000-$1,500';
+  if (bal < 2000) return '$1,500-$2,000';
+  if (bal < 2500) return '$2,000-$2,500';
+  if (bal < 5000) return '$2,500-$5,000';
+  return '$5,000+';
+}
+
 // ── ATB Date Parsing ──────────────────────────────────────────────────────────
 
 export function parseAtbDate(sourceName) {
@@ -135,6 +155,7 @@ export function enrichAtbRows(rawRows) {
       _lastInsFileDateAge: lastInsFileDateAge,
       _lastInsFileDateBucket: standardBucket(lastInsFileDateAge),
       _unbilledDosBucket: isUnbilled ? unbilledDosBucket(dosAge) : null,
+      _balanceTier: balanceTier(balance),
     };
   });
 }
@@ -323,7 +344,7 @@ export function buildAtbDenialBreakdown(data) {
 // ── New Sub-tab Helpers ───────────────────────────────────────────────────────
 
 export function hasDenialCode(row) {
-  return Boolean(row.FirstDenialCode && String(row.FirstDenialCode).trim() !== '');
+  return isTrueDenial(row.FirstDenialCode);
 }
 
 // Generic: group rows by a key function → [{[keyName], balance, count}] sorted by balance
