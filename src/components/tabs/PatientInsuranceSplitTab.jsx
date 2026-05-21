@@ -31,6 +31,15 @@ function InfoBox({ children }) {
   );
 }
 
+const PATIENT_CPT_COLS = [
+  { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
+  { key: 'chgAmt', label: 'Chg Amt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.chgAmt), csvValue: (r) => r.chgAmt?.toFixed(2) },
+  { key: 'insPmt', label: 'Ins Pmt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: 'var(--primary)' }}>{fmt$(r.insPmt)}</span>, csvValue: (r) => r.insPmt?.toFixed(2) },
+  { key: 'ptPmt', label: 'Pt Pmt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: 'var(--orange)' }}>{fmt$(r.ptPmt)}</span>, csvValue: (r) => r.ptPmt?.toFixed(2) },
+  { key: 'ptPct', label: 'Pt %', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span className={r.ptPct < 10 ? 'rate-green' : r.ptPct < 25 ? 'rate-yellow' : r.ptPct < 40 ? 'rate-orange' : 'rate-red'}>{fmtPct(r.ptPct)}</span>, csvValue: (r) => r.ptPct?.toFixed(2) + '%' },
+  { key: 'writeoffs', label: 'Write-offs', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: r.writeoffs > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.writeoffs)}</span>, csvValue: (r) => r.writeoffs?.toFixed(2) },
+];
+
 function PatientSplitDrillDown({ row, filteredData }) {
   const cptRows = useMemo(() => {
     const m = {};
@@ -49,8 +58,7 @@ function PatientSplitDrillDown({ row, filteredData }) {
         ptPct: (c.insPmt + c.ptPmt) > 0 ? (c.ptPmt / (c.insPmt + c.ptPmt)) * 100 : 0,
         writeoffs: c.chgAmt - c.insPmt - c.ptPmt - c.balance,
       }))
-      .sort((a, b) => b.chgAmt - a.chgAmt)
-      .slice(0, 15);
+      .sort((a, b) => b.chgAmt - a.chgAmt);
   }, [row, filteredData]);
 
   return (
@@ -68,21 +76,7 @@ function PatientSplitDrillDown({ row, filteredData }) {
       </div>
       <div>
         <div className="drill-section-title">CPT Breakdown</div>
-        <table className="drill-mini-table">
-          <thead><tr><th>CPT</th><th className="r">Chg Amt</th><th className="r">Ins Pmt</th><th className="r">Pt Pmt</th><th className="r">Pt %</th><th className="r">Write-offs</th></tr></thead>
-          <tbody>
-            {cptRows.map(r => (
-              <tr key={r.cpt}>
-                <td><strong>{r.cpt}</strong></td>
-                <td className="r">{fmt$(r.chgAmt)}</td>
-                <td className="r" style={{ color: 'var(--primary)' }}>{fmt$(r.insPmt)}</td>
-                <td className="r" style={{ color: 'var(--orange)' }}>{fmt$(r.ptPmt)}</td>
-                <td className="r"><span className={r.ptPct < 10 ? 'rate-green' : r.ptPct < 25 ? 'rate-yellow' : r.ptPct < 40 ? 'rate-orange' : 'rate-red'}>{fmtPct(r.ptPct)}</span></td>
-                <td className="r" style={{ color: r.writeoffs > 0 ? 'var(--danger)' : 'inherit', fontSize: 12 }}>{fmt$(r.writeoffs)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <SortableTable columns={PATIENT_CPT_COLS} data={cptRows} pageSize={15} exportFilename={`pt_split_cpts_${row.payer}.csv`} emptyMessage="No CPT data." />
       </div>
     </>
   );

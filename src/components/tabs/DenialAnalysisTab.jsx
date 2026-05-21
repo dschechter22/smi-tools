@@ -15,6 +15,20 @@ function InfoBox({ children }) {
   );
 }
 
+const DENIAL_CPT_COLS = [
+  { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
+  { key: 'totalChgAmt', label: 'Total Chg', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.totalChgAmt), csvValue: (r) => r.totalChgAmt?.toFixed(2) },
+  { key: 'deniedChgAmt', label: 'Denied $', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: r.deniedChgAmt > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.deniedChgAmt)}</span>, csvValue: (r) => r.deniedChgAmt?.toFixed(2) },
+  { key: 'denialRate', label: 'Denial Rate', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span className={r.denialRate > 30 ? 'rate-red' : r.denialRate > 15 ? 'rate-orange' : r.denialRate > 5 ? 'rate-yellow' : 'rate-green'}>{fmtPct(r.denialRate)}</span>, csvValue: (r) => r.denialRate?.toFixed(2) + '%' },
+];
+
+const DENIAL_CODE_COLS = [
+  { key: 'code', label: 'Code', sortable: true, filterType: 'text', render: (r) => <span className="badge badge-red">{r.code}</span> },
+  { key: 'group', label: 'Group', sortable: true, filterType: 'text', render: (r) => <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{r.group || '—'}</span> },
+  { key: 'amt', label: 'Denied $', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.amt), csvValue: (r) => r.amt?.toFixed(2) },
+  { key: 'pct', label: '% of Denials', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmtPct(r.pct), csvValue: (r) => r.pct?.toFixed(2) + '%' },
+];
+
 function DenialDrillDown({ row, filteredData }) {
   const cptRows = useMemo(() => {
     const groups = {};
@@ -27,8 +41,7 @@ function DenialDrillDown({ row, filteredData }) {
     }
     return Object.values(groups)
       .map(g => ({ ...g, denialRate: g.totalChgAmt > 0 ? (g.deniedChgAmt / g.totalChgAmt) * 100 : 0 }))
-      .sort((a, b) => b.deniedChgAmt - a.deniedChgAmt)
-      .slice(0, 15);
+      .sort((a, b) => b.deniedChgAmt - a.deniedChgAmt);
   }, [row, filteredData]);
 
   const codeRows = useMemo(() => {
@@ -41,7 +54,6 @@ function DenialDrillDown({ row, filteredData }) {
     }
     return Object.values(codes)
       .sort((a, b) => b.amt - a.amt)
-      .slice(0, 10)
       .map(c => ({ ...c, pct: row.deniedChgAmt > 0 ? (c.amt / row.deniedChgAmt) * 100 : 0 }));
   }, [row, filteredData]);
 
@@ -57,36 +69,12 @@ function DenialDrillDown({ row, filteredData }) {
         </div>
       </div>
       <div>
-        <div className="drill-section-title">Top CPTs by Denied Dollars</div>
-        <table className="drill-mini-table">
-          <thead><tr><th>CPT</th><th className="r">Total Chg</th><th className="r">Denied $</th><th className="r">Denial Rate</th></tr></thead>
-          <tbody>
-            {cptRows.map(r => (
-              <tr key={r.cpt}>
-                <td><strong>{r.cpt}</strong></td>
-                <td className="r">{fmt$(r.totalChgAmt)}</td>
-                <td className="r" style={{ color: r.deniedChgAmt > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.deniedChgAmt)}</td>
-                <td className="r"><span className={r.denialRate > 30 ? 'rate-red' : r.denialRate > 15 ? 'rate-orange' : r.denialRate > 5 ? 'rate-yellow' : 'rate-green'}>{fmtPct(r.denialRate)}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="drill-section-title">CPTs by Denied Dollars</div>
+        <SortableTable columns={DENIAL_CPT_COLS} data={cptRows} pageSize={15} exportFilename={`denial_cpts_${row.payer}.csv`} emptyMessage="No CPT data." />
       </div>
       <div>
-        <div className="drill-section-title">Top Denial Codes</div>
-        <table className="drill-mini-table">
-          <thead><tr><th>Code</th><th>Group</th><th className="r">Denied $</th><th className="r">% of Denials</th></tr></thead>
-          <tbody>
-            {codeRows.map(r => (
-              <tr key={r.code}>
-                <td><span className="badge badge-red">{r.code}</span></td>
-                <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>{r.group || '—'}</td>
-                <td className="r">{fmt$(r.amt)}</td>
-                <td className="r">{fmtPct(r.pct)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="drill-section-title">Denial Codes</div>
+        <SortableTable columns={DENIAL_CODE_COLS} data={codeRows} pageSize={15} exportFilename={`denial_codes_${row.payer}.csv`} emptyMessage="No denial codes." />
       </div>
     </>
   );

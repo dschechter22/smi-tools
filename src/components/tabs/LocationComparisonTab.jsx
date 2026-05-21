@@ -44,13 +44,25 @@ function LocationDrillDown({ row, filteredData }) {
       byState[state].chgAmt += fmt(r.ChgAmt);
       byState[state].insPmt += fmt(r.InsPmtAmt);
     }
-    return Object.values(byState)
+    const sorted = Object.values(byState)
       .map(s => ({ ...s, rate: s.chgAmt > 0 ? s.insPmt / s.chgAmt : 0 }))
       .sort((a, b) => b.rate - a.rate);
+    const bestRate = sorted.length > 0 ? sorted[0].rate : 0;
+    return sorted.map(s => ({
+      ...s,
+      ppDiff: s.rate - bestRate,
+      dollarGap: (bestRate - s.rate) * s.chgAmt,
+    }));
   }, [row, filteredData]);
 
-  const bestRate = stateRows.length > 0 ? stateRows[0].rate : 0;
-  const totalChg = stateRows.reduce((s, r) => s + r.chgAmt, 0);
+  const stateColumns = [
+    { key: 'state', label: 'State', sortable: true, filterType: 'text' },
+    { key: 'chgAmt', label: 'Total Chg', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.chgAmt), csvValue: (r) => r.chgAmt?.toFixed(2) },
+    { key: 'insPmt', label: 'Ins Pmt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.insPmt), csvValue: (r) => r.insPmt?.toFixed(2) },
+    { key: 'rate', label: 'Rate', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span className={r.ppDiff >= 0 ? 'rate-green' : 'rate-red'}>{fmtRate(r.rate)}</span>, csvValue: (r) => (r.rate * 100).toFixed(2) + '%' },
+    { key: 'ppDiff', label: 'vs Best', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: r.ppDiff < 0 ? 'var(--danger)' : 'var(--success)' }}>{r.ppDiff >= 0 ? '+' : ''}{(r.ppDiff * 100).toFixed(1)} pp</span>, csvValue: (r) => (r.ppDiff * 100).toFixed(1) + 'pp' },
+    { key: 'dollarGap', label: 'Dollar Gap', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: r.dollarGap > 0 ? 'var(--danger)' : 'inherit' }}>{r.dollarGap > 0 ? `-${fmt$(r.dollarGap)}` : '—'}</span>, csvValue: (r) => r.dollarGap > 0 ? r.dollarGap.toFixed(2) : '0' },
+  ];
 
   return (
     <>
@@ -65,25 +77,7 @@ function LocationDrillDown({ row, filteredData }) {
       </div>
       <div>
         <div className="drill-section-title">Rate by State</div>
-        <table className="drill-mini-table">
-          <thead><tr><th>State</th><th className="r">Total Chg</th><th className="r">Ins Pmt</th><th className="r">Rate</th><th className="r">vs Best</th><th className="r">Dollar Gap</th></tr></thead>
-          <tbody>
-            {stateRows.map(s => {
-              const ppDiff = s.rate - bestRate;
-              const dollarGap = (bestRate - s.rate) * s.chgAmt;
-              return (
-                <tr key={s.state}>
-                  <td><strong>{s.state}</strong></td>
-                  <td className="r">{fmt$(s.chgAmt)}</td>
-                  <td className="r">{fmt$(s.insPmt)}</td>
-                  <td className="r"><span className={s.rate === bestRate ? 'rate-green' : 'rate-red'}>{fmtRate(s.rate)}</span></td>
-                  <td className="r" style={{ color: ppDiff < 0 ? 'var(--danger)' : 'var(--success)', fontSize: 12 }}>{ppDiff >= 0 ? '+' : ''}{(ppDiff * 100).toFixed(1)} pp</td>
-                  <td className="r" style={{ color: dollarGap > 0 ? 'var(--danger)' : 'inherit' }}>{dollarGap > 0 ? `-${fmt$(dollarGap)}` : '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <SortableTable columns={stateColumns} data={stateRows} pageSize={25} exportFilename={`location_states_${row.payer}_${row.cpt}.csv`} emptyMessage="No state data." />
       </div>
     </>
   );

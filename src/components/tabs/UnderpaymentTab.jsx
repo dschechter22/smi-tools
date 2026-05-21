@@ -47,12 +47,26 @@ function UnderpaymentDrillDown({ row, filteredData }) {
   const records = useMemo(() =>
     filteredData
       .filter(r => r.PrimIns === row.payer && r.CPTCode === row.cpt)
-      .sort((a, b) => fmt(b.ChgAmt) - fmt(a.ChgAmt))
-      .slice(0, 20),
+      .sort((a, b) => fmt(b.ChgAmt) - fmt(a.ChgAmt)),
     [row, filteredData]
   );
 
+  const benchmark = row.benchmark || 0;
+
+  const payerColumns = useMemo(() => [
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text', render: (p) => p.payer === row.payer ? <strong>{p.payer} ◀</strong> : p.payer },
+    { key: 'rate', label: 'Rate', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (p) => <span className={p.rate < 0.02 ? 'rate-red' : p.rate >= benchmark ? 'rate-green' : p.rate >= benchmark * 0.85 ? 'rate-yellow' : 'rate-orange'}>{fmtRate(p.rate)}</span>, csvValue: (p) => (p.rate * 100).toFixed(2) + '%' },
+    { key: 'totalChg', label: 'Total Chg', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (p) => fmt$(p.totalChg), csvValue: (p) => p.totalChg?.toFixed(2) },
+  ], [row.payer, benchmark]);
+
   const statusCls = (s) => s === 'Closed / Paid' ? 'badge-green' : s === 'Closed / Not Paid' ? 'badge-red' : s === 'Open / Not Paid' ? 'badge-orange' : 'badge-navy';
+
+  const recordColumns = useMemo(() => [
+    { key: 'ChgStatus', label: 'Status', sortable: true, filterType: 'multiselect', render: (r) => <span className={`badge ${statusCls(r.ChgStatus)}`} style={{ fontSize: 10 }}>{r.ChgStatus || '—'}</span> },
+    { key: 'ChgAmt', label: 'Charge', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.ChgAmt), csvValue: (r) => r.ChgAmt?.toFixed(2) },
+    { key: 'InsPmtAmt', label: 'Ins Pmt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.InsPmtAmt), csvValue: (r) => r.InsPmtAmt?.toFixed(2) },
+    { key: 'Balance', label: 'Balance', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: fmt(r.Balance) > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.Balance)}</span>, csvValue: (r) => r.Balance?.toFixed(2) },
+  ], []);
 
   return (
     <>
@@ -69,36 +83,12 @@ function UnderpaymentDrillDown({ row, filteredData }) {
       </div>
       <div>
         <div className="drill-section-title">All Payers for CPT {row.cpt} — Ranked by Rate</div>
-        <table className="drill-mini-table">
-          <thead><tr><th>#</th><th>Payer</th><th className="r">Rate</th><th className="r">Total Chg</th></tr></thead>
-          <tbody>
-            {payerRanking.map((p, i) => (
-              <tr key={p.payer} style={{ background: p.payer === row.payer ? '#fef9e7' : undefined }}>
-                <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
-                <td>{p.payer === row.payer ? <strong>{p.payer} ◀</strong> : p.payer}</td>
-                <td className="r"><span className={p.rate < 0.02 ? 'rate-red' : p.rate >= (row.benchmark || 0) ? 'rate-green' : p.rate >= (row.benchmark || 0) * 0.85 ? 'rate-yellow' : 'rate-orange'}>{fmtRate(p.rate)}</span></td>
-                <td className="r">{fmt$(p.totalChg)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <SortableTable columns={payerColumns} data={payerRanking} pageSize={20} exportFilename={`payer_ranking_${row.cpt}.csv`} emptyMessage="No payer data." />
       </div>
       {records.length > 0 && (
         <div>
-          <div className="drill-section-title">Individual Records (top {records.length})</div>
-          <table className="drill-mini-table">
-            <thead><tr><th>Status</th><th className="r">Charge</th><th className="r">Ins Pmt</th><th className="r">Balance</th></tr></thead>
-            <tbody>
-              {records.map((r, i) => (
-                <tr key={i}>
-                  <td><span className={`badge ${statusCls(r.ChgStatus)}`} style={{ fontSize: 10 }}>{r.ChgStatus || '—'}</span></td>
-                  <td className="r">{fmt$(r.ChgAmt)}</td>
-                  <td className="r">{fmt$(r.InsPmtAmt)}</td>
-                  <td className="r" style={{ color: fmt(r.Balance) > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.Balance)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="drill-section-title">Individual Records ({records.length})</div>
+          <SortableTable columns={recordColumns} data={records} pageSize={20} exportFilename={`records_${row.payer}_${row.cpt}.csv`} emptyMessage="No records." />
         </div>
       )}
     </>

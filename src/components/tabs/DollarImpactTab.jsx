@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -9,8 +9,9 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { calculateCPTBenchmarks, calculateUnderpaymentStats } from '../../utils/calculations.js';
+import { calculateCPTBenchmarks, calculateUnderpaymentStats, fmt } from '../../utils/calculations.js';
 import SortableTable from '../SortableTable.jsx';
+import DrillDownPanel from '../DrillDownPanel.jsx';
 import { fmt$, fmtRate } from '../../utils/format.js';
 
 function InfoBox({ children }) {
@@ -30,6 +31,72 @@ function InfoBox({ children }) {
   );
 }
 
+function DollarImpactDrillDown({ row, filteredData }) {
+  const payerRanking = useMemo(() => {
+    const groups = {};
+    for (const r of filteredData) {
+      if (r.CPTCode !== row.cpt) continue;
+      const payer = r.PrimIns || '(Unknown)';
+      if (!groups[payer]) groups[payer] = { payer, totalChg: 0, totalIns: 0 };
+      groups[payer].totalChg += fmt(r.ChgAmt);
+      groups[payer].totalIns += fmt(r.InsPmtAmt);
+    }
+    return Object.values(groups)
+      .filter(g => g.totalChg > 0)
+      .map(g => ({ ...g, rate: g.totalIns / g.totalChg }))
+      .sort((a, b) => b.rate - a.rate);
+  }, [row, filteredData]);
+
+  const records = useMemo(() =>
+    filteredData
+      .filter(r => r.PrimIns === row.payer && r.CPTCode === row.cpt)
+      .sort((a, b) => fmt(b.ChgAmt) - fmt(a.ChgAmt)),
+    [row, filteredData]
+  );
+
+  const benchmark = row.benchmark || 0;
+
+  const payerColumns = useMemo(() => [
+    { key: 'payer', label: 'Payer', sortable: true, filterType: 'text', render: (p) => p.payer === row.payer ? <strong>{p.payer} ◀</strong> : p.payer },
+    { key: 'rate', label: 'Rate', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (p) => <span className={p.rate < 0.02 ? 'rate-red' : p.rate >= benchmark ? 'rate-green' : p.rate >= benchmark * 0.85 ? 'rate-yellow' : 'rate-orange'}>{fmtRate(p.rate)}</span>, csvValue: (p) => (p.rate * 100).toFixed(2) + '%' },
+    { key: 'totalChg', label: 'Total Chg', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (p) => fmt$(p.totalChg), csvValue: (p) => p.totalChg?.toFixed(2) },
+  ], [row.payer, benchmark]);
+
+  const statusCls = (s) => s === 'Closed / Paid' ? 'badge-green' : s === 'Closed / Not Paid' ? 'badge-red' : s === 'Open / Not Paid' ? 'badge-orange' : 'badge-navy';
+
+  const recordColumns = useMemo(() => [
+    { key: 'ChgStatus', label: 'Status', sortable: true, filterType: 'multiselect', render: (r) => <span className={`badge ${statusCls(r.ChgStatus)}`} style={{ fontSize: 10 }}>{r.ChgStatus || '—'}</span> },
+    { key: 'ChgAmt', label: 'Charge', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.ChgAmt), csvValue: (r) => r.ChgAmt?.toFixed(2) },
+    { key: 'InsPmtAmt', label: 'Ins Pmt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.InsPmtAmt), csvValue: (r) => r.InsPmtAmt?.toFixed(2) },
+    { key: 'Balance', label: 'Balance', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: fmt(r.Balance) > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.Balance)}</span>, csvValue: (r) => r.Balance?.toFixed(2) },
+  ], []);
+
+  return (
+    <>
+      <div>
+        <div className="drill-section-title">Payment Rate Summary</div>
+        <div className="drill-kpis">
+          <div className="drill-kpi"><div className="drill-kpi-label">Payer Rate</div><div className="drill-kpi-value" style={{ color: row.gapPct != null && row.gapPct < -15 ? 'var(--danger)' : 'inherit' }}>{row.payerRate != null ? fmtRate(row.payerRate) : '—'}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Benchmark</div><div className="drill-kpi-value">{row.benchmark != null ? fmtRate(row.benchmark) : '—'}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Gap</div><div className="drill-kpi-value" style={{ color: row.gapPct != null && row.gapPct < 0 ? 'var(--danger)' : 'var(--success)' }}>{row.gapPct != null ? `${row.gapPct >= 0 ? '+' : ''}${Math.round(row.gapPct)}%` : '—'}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Dollar Impact</div><div className="drill-kpi-value" style={{ color: 'var(--danger)' }}>{fmt$(row.dollarImpact)}</div></div>
+          <div className="drill-kpi"><div className="drill-kpi-label">Total Charged</div><div className="drill-kpi-value">{fmt$(row.totalChgAmt)}</div></div>
+        </div>
+      </div>
+      <div>
+        <div className="drill-section-title">All Payers for CPT {row.cpt} — Ranked by Rate</div>
+        <SortableTable columns={payerColumns} data={payerRanking} pageSize={20} exportFilename={`payer_ranking_${row.cpt}.csv`} emptyMessage="No payer data." />
+      </div>
+      {records.length > 0 && (
+        <div>
+          <div className="drill-section-title">Individual Records ({records.length})</div>
+          <SortableTable columns={recordColumns} data={records} pageSize={20} exportFilename={`records_${row.payer}_${row.cpt}.csv`} emptyMessage="No records." />
+        </div>
+      )}
+    </>
+  );
+}
+
 const IMPACT_COLORS = [
   '#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444',
   '#f97316', '#fb923c', '#fbbf24', '#f59e0b', '#d97706',
@@ -38,6 +105,7 @@ const IMPACT_COLORS = [
 ];
 
 export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
+  const [drillRow, setDrillRow] = useState(null);
   const benchmarks = useMemo(
     () => calculateCPTBenchmarks(filteredData, benchmarkMethod),
     [filteredData, benchmarkMethod]
@@ -221,7 +289,18 @@ export default function DollarImpactTab({ filteredData, benchmarkMethod }) {
         pageSize={25}
         exportFilename="dollar_impact.csv"
         emptyMessage="No underpayment gaps found in filtered data (all payers are at or above benchmark)."
+        onRowClick={setDrillRow}
       />
+
+      {drillRow && (
+        <DrillDownPanel
+          title={`${drillRow.payer} — CPT ${drillRow.cpt}`}
+          subtitle="Dollar Impact — Payer Detail"
+          onClose={() => setDrillRow(null)}
+        >
+          <DollarImpactDrillDown row={drillRow} filteredData={filteredData} />
+        </DrillDownPanel>
+      )}
     </div>
   );
 }

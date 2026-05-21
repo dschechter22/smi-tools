@@ -21,6 +21,20 @@ function InfoBox({ children }) {
   );
 }
 
+const PATHWAY_PAYER_COLS = [
+  { key: 'payer', label: 'Payer', sortable: true, filterType: 'text' },
+  { key: 'chgAmt', label: 'Chg Amt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.chgAmt), csvValue: (r) => r.chgAmt?.toFixed(2) },
+  { key: 'balance', label: 'Balance', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: r.balance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.balance)}</span>, csvValue: (r) => r.balance?.toFixed(2) },
+  { key: 'count', label: 'Count', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right' },
+];
+
+const PATHWAY_CPT_COLS = [
+  { key: 'cpt', label: 'CPT', sortable: true, filterType: 'text' },
+  { key: 'chgAmt', label: 'Chg Amt', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => fmt$(r.chgAmt), csvValue: (r) => r.chgAmt?.toFixed(2) },
+  { key: 'balance', label: 'Balance', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right', render: (r) => <span style={{ color: r.balance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.balance)}</span>, csvValue: (r) => r.balance?.toFixed(2) },
+  { key: 'count', label: 'Count', sortable: true, filterType: 'number', cellClass: 'td-mono text-right', headerClass: 'text-right' },
+];
+
 function PathwayDrillDown({ row, allRows }) {
   const matchingRows = useMemo(() =>
     allRows.filter(r => r.FirstDenialCode === row.firstCode && r.LastDenialCode === row.lastCode),
@@ -36,7 +50,7 @@ function PathwayDrillDown({ row, allRows }) {
       m[key].balance += fmt(r.Balance);
       m[key].count++;
     }
-    return Object.values(m).sort((a, b) => b.chgAmt - a.chgAmt).slice(0, 10);
+    return Object.values(m).sort((a, b) => b.chgAmt - a.chgAmt);
   }, [matchingRows]);
 
   const byCpt = useMemo(() => {
@@ -48,7 +62,7 @@ function PathwayDrillDown({ row, allRows }) {
       m[key].balance += fmt(r.Balance);
       m[key].count++;
     }
-    return Object.values(m).sort((a, b) => b.chgAmt - a.chgAmt).slice(0, 10);
+    return Object.values(m).sort((a, b) => b.chgAmt - a.chgAmt);
   }, [matchingRows]);
 
   const totalChg = matchingRows.reduce((s, r) => s + fmt(r.ChgAmt), 0);
@@ -67,36 +81,12 @@ function PathwayDrillDown({ row, allRows }) {
         </div>
       </div>
       <div>
-        <div className="drill-section-title">Top Payers</div>
-        <table className="drill-mini-table">
-          <thead><tr><th>Payer</th><th className="r">Chg Amt</th><th className="r">Balance</th><th className="r">Count</th></tr></thead>
-          <tbody>
-            {byPayer.map(r => (
-              <tr key={r.payer}>
-                <td>{r.payer}</td>
-                <td className="r">{fmt$(r.chgAmt)}</td>
-                <td className="r" style={{ color: r.balance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.balance)}</td>
-                <td className="r">{r.count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="drill-section-title">Payers</div>
+        <SortableTable columns={PATHWAY_PAYER_COLS} data={byPayer} pageSize={15} exportFilename={`pathway_payers_${row.firstCode}_${row.lastCode}.csv`} emptyMessage="No payer data." />
       </div>
       <div>
-        <div className="drill-section-title">Top CPTs</div>
-        <table className="drill-mini-table">
-          <thead><tr><th>CPT</th><th className="r">Chg Amt</th><th className="r">Balance</th><th className="r">Count</th></tr></thead>
-          <tbody>
-            {byCpt.map(r => (
-              <tr key={r.cpt}>
-                <td><strong>{r.cpt}</strong></td>
-                <td className="r">{fmt$(r.chgAmt)}</td>
-                <td className="r" style={{ color: r.balance > 0 ? 'var(--danger)' : 'inherit' }}>{fmt$(r.balance)}</td>
-                <td className="r">{r.count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="drill-section-title">CPTs</div>
+        <SortableTable columns={PATHWAY_CPT_COLS} data={byCpt} pageSize={15} exportFilename={`pathway_cpts_${row.firstCode}_${row.lastCode}.csv`} emptyMessage="No CPT data." />
       </div>
     </>
   );
