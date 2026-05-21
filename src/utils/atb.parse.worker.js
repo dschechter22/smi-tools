@@ -16,26 +16,47 @@ self.onmessage = async (e) => {
     let selectedName = debitName;
 
     if (!selectedName) {
-      // Fall back to whichever sheet has the most rows
+      // Fall back to whichever sheet has the most raw rows
       let maxRows = 0;
       for (const name of wb.SheetNames) {
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' });
-        if (rows.length > maxRows) { maxRows = rows.length; selectedName = name; }
+        const arrs = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
+        if (arrs.length > maxRows) { maxRows = arrs.length; selectedName = name; }
       }
     }
 
-    if (!selectedName) throw new Error(`No usable sheet found. Sheets in file: ${wb.SheetNames.join(', ')}`);
+    if (!selectedName) throw new Error(`No usable sheet found. Sheets: ${wb.SheetNames.join(', ')}`);
 
-    post('progress', { pct: 60, status: `Reading sheet "${selectedName}"…` });
-    const rawRows = XLSX.utils.sheet_to_json(wb.Sheets[selectedName], { defval: '' });
+    const sheet = wb.Sheets[selectedName];
+    const ref = sheet['!ref'] || 'none';
+    post('progress', { pct: 60, status: `Sheet "${selectedName}" — range: ${ref}` });
 
-    if (rawRows.length === 0) {
-      throw new Error(`Sheet "${selectedName}" appears to be empty. Sheets available: ${wb.SheetNames.join(', ')}`);
+    // Use header:1 (raw arrays) so merged/blank header cells don't break the parse
+    const rawArrays = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    post('progress', { pct: 75, status: `Raw rows: ${rawArrays.length}, cols in row 1: ${rawArrays[0]?.length ?? 0}` });
+
+    if (rawArrays.length < 2) {
+      throw new Error(
+        `Sheet "${selectedName}" returned ${rawArrays.length} raw rows (range=${ref}). ` +
+        `All sheets: ${wb.SheetNames.join(', ')}`
+      );
     }
 
-    // Send first-row keys as a diagnostic so we can verify column names
-    const sampleKeys = Object.keys(rawRows[0]).slice(0, 8).join(', ');
-    post('progress', { pct: 90, status: `Loaded ${rawRows.length.toLocaleString()} rows from "${selectedName}"` });
+    // First row = headers; remaining rows = data
+    const headers = rawArrays[0].map(h => String(h == null ? '' : h).trim());
+    const rawRows = rawArrays.slice(1)
+      .filter(arr => arr.some(v => v !== ''))   // skip fully-blank rows
+      .map(arr => {
+        const obj = {};
+        headers.forEach((h, i) => { obj[h] = arr[i] ?? ''; });
+        return obj;
+      });
+
+    if (rawRows.length === 0) {
+      throw new Error(`Sheet "${selectedName}" has headers but no data rows. Headers: ${headers.slice(0, 6).join(', ')}`);
+    }
+
+    const sampleKeys = headers.slice(0, 8).join(', ');
+    post('progress', { pct: 90, status: `Loaded ${rawRows.length.toLocaleString()} rows — cols: ${sampleKeys}` });
     post('complete', { rows: rawRows, sheetName: selectedName, sampleKeys });
   } catch (err) {
     post('error', { message: err.message || 'Unknown parse error' });
