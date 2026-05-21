@@ -2,49 +2,63 @@ import * as XLSX from 'xlsx';
 
 function post(type, payload) { self.postMessage({ type, ...payload }); }
 
+function findSheet(wb, name) {
+  // Direct lookup first
+  if (wb.Sheets[name]) return { key: name, sheet: wb.Sheets[name] };
+  // Fuzzy: iterate actual keys in case of encoding mismatch
+  const actualKeys = Object.keys(wb.Sheets);
+  const match = actualKeys.find(k => k.trim().toLowerCase() === name.trim().toLowerCase());
+  if (match && wb.Sheets[match]) return { key: match, sheet: wb.Sheets[match] };
+  return null;
+}
+
 self.onmessage = async (e) => {
   const { file, ext } = e.data;
   try {
     post('progress', { pct: 10, status: 'Reading file…' });
     if (!['xlsx', 'xls', 'xlsb'].includes(ext)) throw new Error('ATB files must be Excel (.xlsb, .xlsx, or .xls).');
 
-    const wb = XLSX.read(file, { type: 'array' });
-    post('progress', { pct: 40, status: `Found sheets: ${wb.SheetNames.join(', ')}` });
+    // dense:true is more memory-efficient for large xlsb and avoids cell-map issues
+    const wb = XLSX.read(file, { type: 'array', dense: true });
 
-    // Case-insensitive match for "Debit"
+    const sheetNamesStr = wb.SheetNames.join(', ');
+    const sheetsKeysStr = Object.keys(wb.Sheets).join(', ');
+    post('progress', { pct: 40, status: `SheetNames: [${sheetNamesStr}] — Sheets keys: [${sheetsKeysStr}]` });
+
+    // Find "Debit" sheet
+    let found = null;
     const debitName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'debit');
-    let selectedName = debitName;
+    if (debitName) found = findSheet(wb, debitName);
 
-    if (!selectedName) {
-      // Fall back to whichever sheet has the most raw rows
-      let maxRows = 0;
+    // Fallback: largest sheet by raw row count
+    if (!found) {
+      let maxRows = -1;
       for (const name of wb.SheetNames) {
-        const arrs = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' });
-        if (arrs.length > maxRows) { maxRows = arrs.length; selectedName = name; }
+        const r = findSheet(wb, name);
+        if (!r) continue;
+        const arrs = XLSX.utils.sheet_to_json(r.sheet, { header: 1, defval: '' });
+        if (arrs.length > maxRows) { maxRows = arrs.length; found = r; }
       }
     }
 
-    if (!selectedName) throw new Error(`No usable sheet found. Sheets: ${wb.SheetNames.join(', ')}`);
-
-    const sheet = wb.Sheets[selectedName];
-    const ref = sheet['!ref'] || 'none';
-    post('progress', { pct: 60, status: `Sheet "${selectedName}" — range: ${ref}` });
-
-    // Use header:1 (raw arrays) so merged/blank header cells don't break the parse
-    const rawArrays = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    post('progress', { pct: 75, status: `Raw rows: ${rawArrays.length}, cols in row 1: ${rawArrays[0]?.length ?? 0}` });
-
-    if (rawArrays.length < 2) {
-      throw new Error(
-        `Sheet "${selectedName}" returned ${rawArrays.length} raw rows (range=${ref}). ` +
-        `All sheets: ${wb.SheetNames.join(', ')}`
-      );
+    if (!found) {
+      throw new Error(`Could not access any sheet. SheetNames=[${sheetNamesStr}] Sheets keys=[${sheetsKeysStr}]`);
     }
 
-    // First row = headers; remaining rows = data
+    const { key: selectedName, sheet } = found;
+    const ref = sheet['!ref'] || (sheet['!data'] ? `dense(${sheet['!data'].length} rows)` : 'none');
+    post('progress', { pct: 60, status: `Sheet "${selectedName}" — range: ${ref}` });
+
+    const rawArrays = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    post('progress', { pct: 75, status: `Raw rows: ${rawArrays.length}, cols: ${rawArrays[0]?.length ?? 0}` });
+
+    if (rawArrays.length < 2) {
+      throw new Error(`Sheet "${selectedName}" has ${rawArrays.length} raw rows (${ref}). Available sheets: ${sheetNamesStr}`);
+    }
+
     const headers = rawArrays[0].map(h => String(h == null ? '' : h).trim());
     const rawRows = rawArrays.slice(1)
-      .filter(arr => arr.some(v => v !== ''))   // skip fully-blank rows
+      .filter(arr => arr.some(v => v !== ''))
       .map(arr => {
         const obj = {};
         headers.forEach((h, i) => { obj[h] = arr[i] ?? ''; });
