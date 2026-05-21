@@ -168,6 +168,7 @@ export function buildAtbDefaultFilters() {
     carrier: [],
     insuranceType: [],
     dosBucket: [],
+    madBucket: [],
     modality: [],
     locationState: [],
     actionGroup: [],
@@ -183,6 +184,7 @@ export function applyAtbFilters(data, filters) {
     if (filters.carrier.length > 0 && !filters.carrier.includes(row._carrier)) return false;
     if (filters.insuranceType.length > 0 && !filters.insuranceType.includes(row.InsuranceType)) return false;
     if (filters.dosBucket.length > 0 && !filters.dosBucket.includes(row._dosBucket)) return false;
+    if (filters.madBucket && filters.madBucket.length > 0 && !filters.madBucket.includes(row['MAD Aging Bucket'])) return false;
     if (filters.modality.length > 0 && !filters.modality.includes(row.Modality)) return false;
     if (filters.locationState.length > 0 && !filters.locationState.includes(row['Location State'])) return false;
     if (filters.actionGroup.length > 0 && !filters.actionGroup.includes(row['New Action Grouping'])) return false;
@@ -197,7 +199,7 @@ export function applyAtbFilters(data, filters) {
 export function countAtbActiveFilters(filters) {
   let count = 0;
   const multiselects = [
-    'status', 'carrier', 'insuranceType', 'dosBucket', 'modality',
+    'status', 'carrier', 'insuranceType', 'dosBucket', 'madBucket', 'modality',
     'locationState', 'actionGroup', 'workList', 'dollarTier', 'cptCode',
   ];
   for (const key of multiselects) {
@@ -304,6 +306,21 @@ export function buildAtbAgingBreakdown(data) {
   }
 
   return STANDARD_BUCKET_ORDER
+    .filter((b) => map[b] && (map[b].Unbilled + map[b].Unresponded + map[b].Responded) > 0)
+    .map((b) => map[b]);
+}
+
+export function buildStackedAgingByBucket(rows, bucketCol, bucketOrder) {
+  const map = {};
+  for (const row of rows) {
+    const bucket = String(row[bucketCol] || '').trim();
+    if (!bucket) continue;
+    if (!map[bucket]) map[bucket] = { bucket, Unbilled: 0, Unresponded: 0, Responded: 0 };
+    if (row._status === 'Unbilled') map[bucket].Unbilled += row._balance;
+    else if (row._status === 'Unresponded') map[bucket].Unresponded += row._balance;
+    else map[bucket].Responded += row._balance;
+  }
+  return (bucketOrder || [])
     .filter((b) => map[b] && (map[b].Unbilled + map[b].Unresponded + map[b].Responded) > 0)
     .map((b) => map[b]);
 }
@@ -524,6 +541,7 @@ export function buildAtbColumnMeta(data) {
     'InsuranceType',
     '_dosBucket',
     '_unbilledDosBucket',
+    'MAD Aging Bucket',
     'Modality',
     'Location State',
     'New Action Grouping',
@@ -546,6 +564,8 @@ export function buildAtbColumnMeta(data) {
       result[field] = STANDARD_BUCKET_ORDER.filter((b) => valSet.has(b));
     } else if (field === '_unbilledDosBucket') {
       result[field] = UNBILLED_BUCKET_ORDER.filter((b) => valSet.has(b));
+    } else if (field === 'MAD Aging Bucket') {
+      result[field] = STANDARD_BUCKET_ORDER.filter((b) => valSet.has(b));
     } else {
       result[field] = Array.from(valSet).sort((a, b) => a.localeCompare(b));
     }
