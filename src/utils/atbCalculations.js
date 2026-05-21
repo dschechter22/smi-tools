@@ -328,6 +328,180 @@ export function buildAtbDenialBreakdown(data) {
   return { totalDenied, codes: codeList };
 }
 
+// ── New Sub-tab Helpers ───────────────────────────────────────────────────────
+
+export function hasDenialCode(row) {
+  return Boolean(row.FirstDenialCode && String(row.FirstDenialCode).trim() !== '');
+}
+
+// Generic: group rows by a key function → [{[keyName], balance, count}] sorted by balance
+export function buildKeyBreakdown(rows, keyFn, keyName = 'key') {
+  const map = {};
+  for (const row of rows) {
+    const k = keyFn(row);
+    if (k == null || k === '') continue;
+    const ks = String(k);
+    if (!map[ks]) map[ks] = { [keyName]: ks, balance: 0, count: 0 };
+    map[ks].balance += row._balance;
+    map[ks].count++;
+  }
+  return Object.values(map).sort((a, b) => b.balance - a.balance);
+}
+
+// Generic: group rows by a pre-computed bucket column → ordered by bucketOrder
+export function buildBucketBreakdown(rows, bucketColKey, bucketOrder) {
+  const map = {};
+  let total = 0;
+  for (const row of rows) {
+    const b = String(row[bucketColKey] || '').trim();
+    if (!b) continue;
+    if (!map[b]) map[b] = { bucket: b, balance: 0, count: 0 };
+    map[b].balance += row._balance;
+    map[b].count++;
+    total += row._balance;
+  }
+  const ordered = bucketOrder.filter(b => map[b]).map(b => ({ ...map[b], pct: total > 0 ? (map[b].balance / total) * 100 : 0 }));
+  const seen = new Set(bucketOrder);
+  const extra = Object.values(map).filter(r => !seen.has(r.bucket)).map(r => ({ ...r, pct: total > 0 ? (r.balance / total) * 100 : 0 })).sort((a, b) => b.balance - a.balance);
+  return [...ordered, ...extra];
+}
+
+// Billed AR: carrier → performance metrics
+export function buildPayerPerformance(rows) {
+  const map = {};
+  for (const row of rows) {
+    const c = row._carrier || '(Unknown)';
+    if (!map[c]) map[c] = { carrier: c, balance: 0, count: 0, respondedCount: 0, unrespondedCount: 0, respondedBalance: 0, unrespondedBalance: 0, madAgeSum: 0, madAgeCount: 0, initFileAgeSum: 0, initFileAgeCount: 0 };
+    const g = map[c];
+    g.balance += row._balance;
+    g.count++;
+    if (row._status === 'Responded') { g.respondedCount++; g.respondedBalance += row._balance; }
+    if (row._status === 'Unresponded') { g.unrespondedCount++; g.unrespondedBalance += row._balance; }
+    const mad = parseFloat(row['MAD Age']);
+    if (!isNaN(mad)) { g.madAgeSum += mad; g.madAgeCount++; }
+    if (row._initialFileDateAge != null) { g.initFileAgeSum += row._initialFileDateAge; g.initFileAgeCount++; }
+  }
+  return Object.values(map).map(g => ({
+    carrier: g.carrier, balance: g.balance, count: g.count,
+    respondedBalance: g.respondedBalance, unrespondedBalance: g.unrespondedBalance,
+    responseRate: g.count > 0 ? (g.respondedCount / g.count) * 100 : 0,
+    avgMadAge: g.madAgeCount > 0 ? Math.round(g.madAgeSum / g.madAgeCount) : null,
+    avgInitFileAge: g.initFileAgeCount > 0 ? Math.round(g.initFileAgeSum / g.initFileAgeCount) : null,
+  })).sort((a, b) => b.balance - a.balance);
+}
+
+// Denials: code-level ranking
+export function buildDenialCodeRanking(rows) {
+  let total = 0;
+  const map = {};
+  for (const row of rows) {
+    const code = String(row.FirstDenialCode || '').trim();
+    if (!code) continue;
+    if (!map[code]) map[code] = { code, group: String(row.FirstDenialGroup || '').trim(), balance: 0, count: 0, carriers: new Set() };
+    map[code].balance += row._balance;
+    map[code].count++;
+    map[code].carriers.add(row._carrier);
+    total += row._balance;
+  }
+  return Object.values(map).map(c => ({ code: c.code, group: c.group, balance: c.balance, count: c.count, carrierCount: c.carriers.size, pct: total > 0 ? (c.balance / total) * 100 : 0 })).sort((a, b) => b.balance - a.balance);
+}
+
+// Denials: carrier → denied $ + rate vs all billed
+export function buildPayerDenialMatrix(denialRows, allBilledRows) {
+  const billedByCarrier = {};
+  for (const row of allBilledRows) { const c = row._carrier || '(Unknown)'; billedByCarrier[c] = (billedByCarrier[c] || 0) + row._balance; }
+  const map = {};
+  for (const row of denialRows) {
+    const c = row._carrier || '(Unknown)';
+    if (!map[c]) map[c] = { carrier: c, balance: 0, count: 0, topCode: null, topCodeBal: 0, codes: {} };
+    const g = map[c];
+    g.balance += row._balance;
+    g.count++;
+    const code = String(row.FirstDenialCode || '').trim();
+    if (code) { g.codes[code] = (g.codes[code] || 0) + row._balance; if (g.codes[code] > g.topCodeBal) { g.topCode = code; g.topCodeBal = g.codes[code]; } }
+  }
+  return Object.values(map).map(g => ({ carrier: g.carrier, balance: g.balance, count: g.count, topCode: g.topCode, denialRate: billedByCarrier[g.carrier] > 0 ? (g.balance / billedByCarrier[g.carrier]) * 100 : null })).sort((a, b) => b.balance - a.balance);
+}
+
+// Denials: re-denial pathways (first ≠ last code)
+export function buildDenialPathways(rows) {
+  const map = {};
+  for (const row of rows) {
+    const first = String(row.FirstDenialCode || '').trim();
+    const last = String(row.LastDenialCode || '').trim();
+    if (!first || !last || first === last) continue;
+    const key = `${first} → ${last}`;
+    if (!map[key]) map[key] = { pathway: key, firstCode: first, lastCode: last, balance: 0, count: 0 };
+    map[key].balance += row._balance;
+    map[key].count++;
+  }
+  return Object.values(map).sort((a, b) => b.balance - a.balance);
+}
+
+// Payer Analysis: plan breakdown
+export function buildPlanBreakdown(rows) {
+  const map = {};
+  for (const row of rows) {
+    const plan = String(row.InsurancePlanDescription || '').trim() || '(Unknown)';
+    if (!map[plan]) map[plan] = { plan, carrier: row._carrier || '', balance: 0, count: 0, unbilledBal: 0, unrespondedBal: 0, respondedBal: 0, deniedBal: 0 };
+    const g = map[plan];
+    g.balance += row._balance;
+    g.count++;
+    if (row._isUnbilled) g.unbilledBal += row._balance;
+    else if (hasDenialCode(row)) g.deniedBal += row._balance;
+    else if (row._status === 'Unresponded') g.unrespondedBal += row._balance;
+    else g.respondedBal += row._balance;
+  }
+  return Object.values(map).sort((a, b) => b.balance - a.balance);
+}
+
+// Payer Analysis: plan aging averages
+export function buildPlanAging(rows) {
+  const map = {};
+  for (const row of rows) {
+    const plan = String(row.InsurancePlanDescription || '').trim() || '(Unknown)';
+    if (!map[plan]) map[plan] = { plan, balance: 0, count: 0, madSum: 0, madN: 0, dosSum: 0, dosN: 0, initSum: 0, initN: 0 };
+    const g = map[plan];
+    g.balance += row._balance;
+    g.count++;
+    const mad = parseFloat(row['MAD Age']);
+    if (!isNaN(mad)) { g.madSum += mad; g.madN++; }
+    if (row._dosAge != null) { g.dosSum += row._dosAge; g.dosN++; }
+    if (row._initialFileDateAge != null) { g.initSum += row._initialFileDateAge; g.initN++; }
+  }
+  return Object.values(map).map(g => ({ plan: g.plan, balance: g.balance, count: g.count, avgMadAge: g.madN > 0 ? Math.round(g.madSum / g.madN) : null, avgDosAge: g.dosN > 0 ? Math.round(g.dosSum / g.dosN) : null, avgInitFileAge: g.initN > 0 ? Math.round(g.initSum / g.initN) : null })).sort((a, b) => b.balance - a.balance);
+}
+
+// Payer Analysis: plan denial profile
+export function buildPlanDenialProfile(denialRows, allRows) {
+  const totalByPlan = {};
+  for (const row of allRows) { const p = String(row.InsurancePlanDescription || '').trim() || '(Unknown)'; totalByPlan[p] = (totalByPlan[p] || 0) + row._balance; }
+  const map = {};
+  for (const row of denialRows) {
+    const plan = String(row.InsurancePlanDescription || '').trim() || '(Unknown)';
+    if (!map[plan]) map[plan] = { plan, balance: 0, count: 0, topCode: null, topCodeBal: 0, codes: {} };
+    const g = map[plan];
+    g.balance += row._balance;
+    g.count++;
+    const code = String(row.FirstDenialCode || '').trim();
+    if (code) { g.codes[code] = (g.codes[code] || 0) + row._balance; if (g.codes[code] > g.topCodeBal) { g.topCode = code; g.topCodeBal = g.codes[code]; } }
+  }
+  return Object.values(map).map(g => ({ plan: g.plan, balance: g.balance, count: g.count, topCode: g.topCode, denialRate: totalByPlan[g.plan] > 0 ? (g.balance / totalByPlan[g.plan]) * 100 : null })).sort((a, b) => b.balance - a.balance);
+}
+
+// Payer Analysis: state breakdown
+export function buildStateBreakdown(rows) {
+  const map = {};
+  for (const row of rows) {
+    const state = String(row['Location State'] || '').trim() || '(Unknown)';
+    if (!map[state]) map[state] = { state, balance: 0, count: 0, carriers: new Set() };
+    map[state].balance += row._balance;
+    map[state].count++;
+    map[state].carriers.add(row._carrier);
+  }
+  return Object.values(map).map(g => ({ state: g.state, balance: g.balance, count: g.count, carrierCount: g.carriers.size })).sort((a, b) => b.balance - a.balance);
+}
+
 // ── Column Meta ───────────────────────────────────────────────────────────────
 
 export function buildAtbColumnMeta(data) {
