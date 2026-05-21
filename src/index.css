@@ -92,6 +92,33 @@ input, button, select, textarea { font-family: inherit; }
   letter-spacing: 0.3px;
 }
 
+.mode-switcher {
+  display: flex;
+  gap: 2px;
+  background: rgba(255,255,255,0.08);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+.mode-switcher button {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.65);
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.mode-switcher button.active {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+.mode-switcher button:hover:not(.active) {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.9);
+}
+
 /* ── Layout ─────────────────────────────────────────────────────────────────── */
 .app-body {
   flex: 1;
