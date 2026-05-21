@@ -320,9 +320,10 @@ export function buildStackedAgingByBucket(rows, bucketCol, bucketOrder) {
     else if (row._status === 'Unresponded') map[bucket].Unresponded += row._balance;
     else map[bucket].Responded += row._balance;
   }
-  return (bucketOrder || [])
-    .filter((b) => map[b] && (map[b].Unbilled + map[b].Unresponded + map[b].Responded) > 0)
-    .map((b) => map[b]);
+  const ordered = (bucketOrder || []).filter((b) => map[b]).map((b) => map[b]);
+  const seen = new Set(bucketOrder || []);
+  const extra = Object.values(map).filter((r) => !seen.has(r.bucket));
+  return [...ordered, ...extra].filter((r) => (r.Unbilled + r.Unresponded + r.Responded) > 0);
 }
 
 // ── Denial Breakdown ──────────────────────────────────────────────────────────
@@ -565,7 +566,10 @@ export function buildAtbColumnMeta(data) {
     } else if (field === '_unbilledDosBucket') {
       result[field] = UNBILLED_BUCKET_ORDER.filter((b) => valSet.has(b));
     } else if (field === 'MAD Aging Bucket') {
-      result[field] = STANDARD_BUCKET_ORDER.filter((b) => valSet.has(b));
+      const orderedMad = STANDARD_BUCKET_ORDER.filter((b) => valSet.has(b));
+      const seenMad = new Set(STANDARD_BUCKET_ORDER);
+      const extraMad = Array.from(valSet).filter((v) => !seenMad.has(v)).sort((a, b) => a.localeCompare(b));
+      result[field] = [...orderedMad, ...extraMad];
     } else {
       result[field] = Array.from(valSet).sort((a, b) => a.localeCompare(b));
     }

@@ -1321,3 +1321,59 @@ tbody tr:nth-child(even):hover td { background: #f0f4f8; }
   word-break: break-all;
 }
 
+/* ── Issue flags ─────────────────────────────────────────────────────────── */
+.issue-flag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.issue-flag-crit {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.issue-flag-warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+.issue-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+.issue-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.issue-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.issue-section-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.issue-alert-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--danger);
+  color: #fff;
+  margin-left: auto;
+}
+

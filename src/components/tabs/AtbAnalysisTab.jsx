@@ -12,6 +12,7 @@ import BilledArTab from '../atb/BilledArTab.jsx';
 import AtbDenialsTab from '../atb/AtbDenialsTab.jsx';
 import PayerAnalysisTab from '../atb/PayerAnalysisTab.jsx';
 import OverviewTab from '../atb/OverviewTab.jsx';
+import IssuesTab from '../atb/IssuesTab.jsx';
 import { fmt$ } from '../../utils/format.js';
 import { parseAtbFile } from '../../utils/parseAtbFile.js';
 
@@ -25,6 +26,7 @@ const ATB_TABS = [
   { id: 'billed', label: 'Billed AR' },
   { id: 'denials', label: 'Denials' },
   { id: 'payer', label: 'Payer Analysis' },
+  { id: 'issues', label: '⚠ Issues' },
 ];
 
 // ── Local MultiSelect ─────────────────────────────────────────────────────────
@@ -254,6 +256,7 @@ export default function AtbAnalysisTab({ atbRawRows, atbFileName, onAtbDataLoade
       case 'billed':   return <BilledArTab filteredData={filteredData} />;
       case 'denials':  return <AtbDenialsTab filteredData={filteredData} />;
       case 'payer':    return <PayerAnalysisTab filteredData={filteredData} />;
+      case 'issues':   return <IssuesTab filteredData={filteredData} />;
       default:         return null;
     }
   }

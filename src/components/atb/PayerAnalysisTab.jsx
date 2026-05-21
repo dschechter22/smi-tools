@@ -180,6 +180,13 @@ function ChipSelector({ label, options, selected, onChange }) {
             {selected.length} selected
           </span>
         )}
+        <button
+          type="button"
+          onClick={() => onChange([...options])}
+          style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' }}
+        >
+          Select all
+        </button>
         {selected.length > 0 && (
           <button
             type="button"
