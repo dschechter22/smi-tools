@@ -166,7 +166,6 @@ export function buildAtbDefaultFilters() {
   return {
     status: [],
     carrier: [],
-    insuranceType: [],
     dosBucket: [],
     madBucket: [],
     modality: [],
@@ -182,7 +181,6 @@ export function applyAtbFilters(data, filters) {
   return data.filter((row) => {
     if (filters.status.length > 0 && !filters.status.includes(row._status)) return false;
     if (filters.carrier.length > 0 && !filters.carrier.includes(row._carrier)) return false;
-    if (filters.insuranceType.length > 0 && !filters.insuranceType.includes(row.InsuranceType)) return false;
     if (filters.dosBucket.length > 0 && !filters.dosBucket.includes(row._dosBucket)) return false;
     if (filters.madBucket && filters.madBucket.length > 0 && !filters.madBucket.includes(row['MAD Aging Bucket'])) return false;
     if (filters.modality.length > 0 && !filters.modality.includes(row.Modality)) return false;
@@ -199,7 +197,7 @@ export function applyAtbFilters(data, filters) {
 export function countAtbActiveFilters(filters) {
   let count = 0;
   const multiselects = [
-    'status', 'carrier', 'insuranceType', 'dosBucket', 'madBucket', 'modality',
+    'status', 'carrier', 'dosBucket', 'madBucket', 'modality',
     'locationState', 'actionGroup', 'workList', 'dollarTier', 'cptCode',
   ];
   for (const key of multiselects) {
@@ -546,7 +544,6 @@ export function buildAtbColumnMeta(data) {
   const fields = [
     '_status',
     '_carrier',
-    'InsuranceType',
     '_dosBucket',
     '_unbilledDosBucket',
     'MAD Aging Bucket',

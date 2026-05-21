@@ -13,6 +13,7 @@ import AtbDenialsTab from '../atb/AtbDenialsTab.jsx';
 import PayerAnalysisTab from '../atb/PayerAnalysisTab.jsx';
 import OverviewTab from '../atb/OverviewTab.jsx';
 import IssuesTab from '../atb/IssuesTab.jsx';
+import KpiTab from '../atb/KpiTab.jsx';
 import { fmt$ } from '../../utils/format.js';
 import { parseAtbFile } from '../../utils/parseAtbFile.js';
 
@@ -22,11 +23,12 @@ const STANDARD_BUCKET_ORDER = [
 
 const ATB_TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'kpi',      label: 'KPIs' },
   { id: 'unbilled', label: 'Unbilled AR' },
-  { id: 'billed', label: 'Billed AR' },
-  { id: 'denials', label: 'Denials' },
-  { id: 'payer', label: 'Payer Analysis' },
-  { id: 'issues', label: '⚠ Issues' },
+  { id: 'billed',   label: 'Billed AR' },
+  { id: 'denials',  label: 'Denials' },
+  { id: 'payer',    label: 'Payer Analysis' },
+  { id: 'issues',   label: '⚠ Issues' },
 ];
 
 // ── Local MultiSelect ─────────────────────────────────────────────────────────
@@ -113,7 +115,6 @@ function AtbFilterBar({ filters, onFilterChange, onClearAll, columnMeta }) {
       <div className="filter-chips-row">
         <MultiSelect label="Carrier" options={columnMeta['_carrier'] || []} selected={filters.carrier} onChange={(v) => set('carrier', v)} />
         <MultiSelect label="State" options={columnMeta['Location State'] || []} selected={filters.locationState} onChange={(v) => set('locationState', v)} />
-        <MultiSelect label="Insurance Type" options={columnMeta['InsuranceType'] || []} selected={filters.insuranceType} onChange={(v) => set('insuranceType', v)} />
         <MultiSelect label="DOS Bucket" options={columnMeta['_dosBucket'] || STANDARD_BUCKET_ORDER} selected={filters.dosBucket} onChange={(v) => set('dosBucket', v)} />
         <MultiSelect label="MAD Bucket" options={columnMeta['MAD Aging Bucket'] || []} selected={filters.madBucket} onChange={(v) => set('madBucket', v)} />
         <MultiSelect label="CPT Code" options={columnMeta['CPTCode'] || []} selected={filters.cptCode} onChange={(v) => set('cptCode', v)} />
@@ -252,6 +253,7 @@ export default function AtbAnalysisTab({ atbRawRows, atbFileName, onAtbDataLoade
   function renderTab() {
     switch (activeTab) {
       case 'overview': return <OverviewTab filteredData={filteredData} />;
+      case 'kpi':      return <KpiTab filteredData={filteredData} />;
       case 'unbilled': return <UnbilledTab filteredData={filteredData} totalData={enrichedData} />;
       case 'billed':   return <BilledArTab filteredData={filteredData} />;
       case 'denials':  return <AtbDenialsTab filteredData={filteredData} />;
