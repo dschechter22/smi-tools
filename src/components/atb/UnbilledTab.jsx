@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { buildBucketBreakdown, buildKeyBreakdown, STANDARD_BUCKET_ORDER, BALANCE_TIER_ORDER } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
-import DrillDownPanel from '../DrillDownPanel.jsx';
+import DrillAnalyticsPanel from './DrillAnalyticsPanel.jsx';
 import { fmt$, fmtPct } from '../../utils/format.js';
 
 const UNBILLED_BUCKET_ORDER = ['0-2', '3-5', '6-10', '11-15', '16-30', '31-60', '61+'];
@@ -83,10 +83,12 @@ export default function UnbilledTab({ filteredData, totalData }) {
     return { balance, count, avgDosAge, pctOfTotal, avgBalance };
   }, [unbilledRows, totalData]);
 
-  const agingData = useMemo(
-    () => buildBucketBreakdown(unbilledRows, '_unbilledDosBucket', UNBILLED_BUCKET_ORDER),
-    [unbilledRows]
-  );
+  const [agingMode, setAgingMode] = useState('dos');
+
+  const agingData = useMemo(() => {
+    if (agingMode === 'dos') return buildBucketBreakdown(unbilledRows, '_unbilledDosBucket', UNBILLED_BUCKET_ORDER);
+    return buildBucketBreakdown(unbilledRows, 'MAD Aging Bucket', STANDARD_BUCKET_ORDER);
+  }, [unbilledRows, agingMode]);
 
   const tierData = useMemo(
     () => buildBucketBreakdown(unbilledRows, '_balanceTier', BALANCE_TIER_ORDER),
@@ -123,7 +125,7 @@ export default function UnbilledTab({ filteredData, totalData }) {
   const drillClaims = useMemo(() => {
     if (!drillRow || !drillType) return [];
     switch (drillType) {
-      case 'bucket': return unbilledRows.filter((r) => r._unbilledDosBucket === drillRow.bucket);
+      case 'bucket': return unbilledRows.filter((r) => (agingMode === 'dos' ? r._unbilledDosBucket : r['MAD Aging Bucket']) === drillRow.bucket);
       case 'tier': return unbilledRows.filter((r) => r._balanceTier === drillRow.bucket);
       case 'carrier': return unbilledRows.filter((r) => r._carrier === drillRow.carrier);
       case 'cpt': return unbilledRows.filter((r) => r.CPTCode === drillRow.cpt);
@@ -198,7 +200,11 @@ export default function UnbilledTab({ filteredData, totalData }) {
 
       <div className="panel">
         <div className="panel-header">
-          <span className="panel-title">Unbilled DOS Aging</span>
+          <span className="panel-title">{agingMode === 'dos' ? 'Unbilled DOS Aging' : 'Unbilled MAD Aging'}</span>
+          <div className="aging-mode-toggle">
+            <button type="button" className={agingMode === 'dos' ? 'active' : ''} onClick={() => setAgingMode('dos')}>DOS Age</button>
+            <button type="button" className={agingMode === 'mad' ? 'active' : ''} onClick={() => setAgingMode('mad')}>MAD Age</button>
+          </div>
         </div>
         <div className="panel-body">
           <ResponsiveContainer width="100%" height={240}>
@@ -259,28 +265,12 @@ export default function UnbilledTab({ filteredData, totalData }) {
       </div>
 
       {drillRow && drillType && (
-        <DrillDownPanel title={drillTitle} onClose={handleCloseDrill}>
-          <div className="summary-row" style={{ marginBottom: 16 }}>
-            <div className="summary-item">
-              <div className="card-label">Balance</div>
-              <div className="card-value" style={{ color: 'var(--danger)' }}>{fmt$(drillKpis.balance)}</div>
-            </div>
-            <div className="summary-item">
-              <div className="card-label">Claims</div>
-              <div className="card-value">{drillKpis.count.toLocaleString()}</div>
-            </div>
-            <div className="summary-item">
-              <div className="card-label">Avg DOS Age</div>
-              <div className="card-value">{drillKpis.avgDosAge != null ? `${drillKpis.avgDosAge}d` : '—'}</div>
-            </div>
-          </div>
-          <SortableTable
-            columns={DRILL_COLUMNS}
-            data={drillClaims}
-            exportFilename="unbilled-drill.csv"
-            pageSize={50}
-          />
-        </DrillDownPanel>
+        <DrillAnalyticsPanel
+          title={drillTitle}
+          rows={drillClaims}
+          onClose={handleCloseDrill}
+          exportFilename="unbilled-drill"
+        />
       )}
     </div>
   );

@@ -7,7 +7,7 @@ import {
   hasDenialCode,
 } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
-import DrillDownPanel from '../DrillDownPanel.jsx';
+import DrillAnalyticsPanel from './DrillAnalyticsPanel.jsx';
 import { fmt$, fmtPct } from '../../utils/format.js';
 
 // ── Module-level column definitions ───────────────────────────────────────────
@@ -566,8 +566,7 @@ function DrillStateContent({ drillRow, selectedData }) {
 export default function PayerAnalysisTab({ filteredData }) {
   const [selectedPayers, setSelectedPayers] = useState([]);
   const [selectedStates, setSelectedStates] = useState([]);
-  const [drillRow, setDrillRow] = useState(null);
-  const [drillType, setDrillType] = useState(null);
+  const [drillData, setDrillData] = useState(null);
 
   // Build option lists
   const payerOptions = useMemo(() => {
@@ -609,32 +608,19 @@ export default function PayerAnalysisTab({ filteredData }) {
   const planDenialProfile = useMemo(() => buildPlanDenialProfile(denialRows, selectedData), [denialRows, selectedData]);
   const stateBreakdown = useMemo(() => buildStateBreakdown(selectedData), [selectedData]);
 
-  const handleDrill = (row, type) => {
-    setDrillRow(row);
-    setDrillType(type);
-  };
+  function getPlanRows(planName) {
+    return selectedData.filter((r) => {
+      const p = String(r.InsurancePlanDescription || '').trim();
+      return planName === '(Unknown)' ? !p : p === planName;
+    });
+  }
 
-  const handleCloseDrill = () => {
-    setDrillRow(null);
-    setDrillType(null);
-  };
-
-  const drillTitle = useMemo(() => {
-    if (!drillRow || !drillType) return '';
-    if (drillType === 'plan') return drillRow.plan;
-    if (drillType === 'planAging') return drillRow.plan;
-    if (drillType === 'planDenial') return drillRow.plan;
-    if (drillType === 'state') return drillRow.state;
-    return '';
-  }, [drillRow, drillType]);
-
-  const drillSubtitle = useMemo(() => {
-    if (drillType === 'plan') return 'Plan Detail';
-    if (drillType === 'planAging') return 'Plan Aging Detail';
-    if (drillType === 'planDenial') return 'Plan Denial Profile';
-    if (drillType === 'state') return 'State Distribution Detail';
-    return '';
-  }, [drillType]);
+  function getStateRows(stateName) {
+    return selectedData.filter((r) => {
+      const s = String(r['Location State'] || '').trim();
+      return stateName === '(Unknown)' ? !s : s === stateName;
+    });
+  }
 
   if (!filteredData || filteredData.length === 0) {
     return (
@@ -716,7 +702,7 @@ export default function PayerAnalysisTab({ filteredData }) {
           pageSize={25}
           exportFilename="payer_plan_breakdown.csv"
           emptyMessage="No plan data."
-          onRowClick={(row) => handleDrill(row, 'plan')}
+          onRowClick={(row) => setDrillData({ rows: getPlanRows(row.plan), title: row.plan, subtitle: `${row.carrier} — Plan Detail` })}
         />
       </div>
 
@@ -732,7 +718,7 @@ export default function PayerAnalysisTab({ filteredData }) {
           pageSize={25}
           exportFilename="payer_plan_aging.csv"
           emptyMessage="No aging data."
-          onRowClick={(row) => handleDrill(row, 'planAging')}
+          onRowClick={(row) => setDrillData({ rows: getPlanRows(row.plan), title: row.plan, subtitle: 'Plan Aging Detail' })}
         />
       </div>
 
@@ -751,7 +737,7 @@ export default function PayerAnalysisTab({ filteredData }) {
             pageSize={25}
             exportFilename="payer_plan_denial_profile.csv"
             emptyMessage="No denial data."
-            onRowClick={(row) => handleDrill(row, 'planDenial')}
+            onRowClick={(row) => setDrillData({ rows: getPlanRows(row.plan), title: row.plan, subtitle: 'Plan Denial Profile' })}
           />
         </div>
       )}
@@ -769,31 +755,20 @@ export default function PayerAnalysisTab({ filteredData }) {
             pageSize={25}
             exportFilename="payer_state_breakdown.csv"
             emptyMessage="No state data."
-            onRowClick={(row) => handleDrill(row, 'state')}
+            onRowClick={(row) => setDrillData({ rows: getStateRows(row.state), title: row.state, subtitle: 'State Detail' })}
           />
         </div>
       )}
 
       {/* Drill-Down Panel */}
-      {drillRow && drillType && (
-        <DrillDownPanel
-          title={drillTitle}
-          subtitle={drillSubtitle}
-          onClose={handleCloseDrill}
-        >
-          {drillType === 'plan' && (
-            <DrillPlanContent drillRow={drillRow} selectedData={selectedData} />
-          )}
-          {drillType === 'planAging' && (
-            <DrillPlanAgingContent drillRow={drillRow} selectedData={selectedData} />
-          )}
-          {drillType === 'planDenial' && (
-            <DrillPlanDenialContent drillRow={drillRow} selectedData={selectedData} />
-          )}
-          {drillType === 'state' && (
-            <DrillStateContent drillRow={drillRow} selectedData={selectedData} />
-          )}
-        </DrillDownPanel>
+      {drillData && (
+        <DrillAnalyticsPanel
+          title={drillData.title}
+          subtitle={drillData.subtitle}
+          rows={drillData.rows}
+          onClose={() => setDrillData(null)}
+          exportFilename="payer-drill"
+        />
       )}
 
     </div>

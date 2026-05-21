@@ -6,7 +6,7 @@ import {
   buildBucketBreakdown, buildPayerPerformance, STANDARD_BUCKET_ORDER, hasDenialCode,
 } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
-import DrillDownPanel from '../DrillDownPanel.jsx';
+import DrillAnalyticsPanel from './DrillAnalyticsPanel.jsx';
 import { fmt$, fmtPct } from '../../utils/format.js';
 
 // ── Column Definitions ────────────────────────────────────────────────────────
@@ -201,6 +201,8 @@ export default function BilledArTab({ filteredData }) {
     [filteredData]
   );
 
+  const [agingMode, setAgingMode] = useState('initFile');
+
   // ── Summary KPIs ────────────────────────────────────────────────────────────
   const summary = useMemo(() => {
     let totalBalance = 0;
@@ -247,6 +249,11 @@ export default function BilledArTab({ filteredData }) {
     [billedRows]
   );
 
+  const dosBucketData = useMemo(
+    () => buildBucketBreakdown(billedRows, '_dosBucket', STANDARD_BUCKET_ORDER),
+    [billedRows]
+  );
+
   // ── Payer Performance ───────────────────────────────────────────────────────
   const payerPerformance = useMemo(
     () => buildPayerPerformance(billedRows),
@@ -285,6 +292,7 @@ export default function BilledArTab({ filteredData }) {
     if (!drillRow || !drillType) return [];
     if (drillType === 'initBucket') return billedRows.filter((r) => r._initialFileDateBucket === drillRow.bucket);
     if (drillType === 'madBucket') return billedRows.filter((r) => r['MAD Aging Bucket'] === drillRow.bucket);
+    if (drillType === 'dosBucket') return billedRows.filter((r) => r._dosBucket === drillRow.bucket);
     if (drillType === 'payer') return billedRows.filter((r) => r._carrier === drillRow.carrier);
     if (drillType === 'responseStatus') return billedRows.filter((r) => r._carrier === drillRow.carrier);
     return [];
@@ -351,15 +359,24 @@ export default function BilledArTab({ filteredData }) {
         </div>
       </div>
 
-      {/* Section 2: Initial File Date Aging */}
+      {/* Section 2: Aging (merged Init File / DOS / MAD with 3-way toggle) */}
       <div className="panel">
         <div className="panel-header">
-          <span className="panel-title">Initial File Date Aging</span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Click a row to drill down</span>
+          <span className="panel-title">
+            {agingMode === 'initFile' ? 'Initial File Date Aging' : agingMode === 'dos' ? 'DOS Aging' : 'MAD Aging'}
+          </span>
+          <div className="aging-mode-toggle">
+            <button type="button" className={agingMode === 'initFile' ? 'active' : ''} onClick={() => setAgingMode('initFile')}>Init File Date</button>
+            <button type="button" className={agingMode === 'dos' ? 'active' : ''} onClick={() => setAgingMode('dos')}>DOS Age</button>
+            <button type="button" className={agingMode === 'mad' ? 'active' : ''} onClick={() => setAgingMode('mad')}>MAD Age</button>
+          </div>
         </div>
         <div className="panel-body">
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={initBucketData} margin={{ top: 8, right: 20, left: 10, bottom: 60 }}>
+            <BarChart
+              data={agingMode === 'initFile' ? initBucketData : agingMode === 'dos' ? dosBucketData : madBucketData}
+              margin={{ top: 8, right: 20, left: 10, bottom: 60 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
                 dataKey="bucket"
@@ -374,52 +391,20 @@ export default function BilledArTab({ filteredData }) {
                 width={72}
               />
               <Tooltip formatter={tooltipFormatter} />
-              <Bar dataKey="balance" name="Balance" fill="#0073bb" />
+              <Bar
+                dataKey="balance"
+                name="Balance"
+                fill={agingMode === 'initFile' ? '#0073bb' : agingMode === 'dos' ? '#1e40af' : '#6d28d9'}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
         <SortableTable
-          columns={INIT_BUCKET_COLS}
-          data={initBucketData}
+          columns={agingMode === 'initFile' ? INIT_BUCKET_COLS : agingMode === 'dos' ? INIT_BUCKET_COLS : MAD_BUCKET_COLS}
+          data={agingMode === 'initFile' ? initBucketData : agingMode === 'dos' ? dosBucketData : madBucketData}
           pageSize={15}
-          exportFilename="billed_ar_init_file_aging.csv"
-          onRowClick={(row) => openDrill(row, 'initBucket')}
-        />
-      </div>
-
-      {/* Section 3: MAD Aging */}
-      <div className="panel">
-        <div className="panel-header">
-          <span className="panel-title">MAD Aging</span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Click a row to drill down</span>
-        </div>
-        <div className="panel-body">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={madBucketData} margin={{ top: 8, right: 20, left: 10, bottom: 60 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis
-                dataKey="bucket"
-                tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
-                angle={-35}
-                textAnchor="end"
-                interval={0}
-              />
-              <YAxis
-                tickFormatter={(v) => fmt$(v)}
-                tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
-                width={72}
-              />
-              <Tooltip formatter={tooltipFormatter} />
-              <Bar dataKey="balance" name="Balance" fill="#6d28d9" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <SortableTable
-          columns={MAD_BUCKET_COLS}
-          data={madBucketData}
-          pageSize={15}
-          exportFilename="billed_ar_mad_aging.csv"
-          onRowClick={(row) => openDrill(row, 'madBucket')}
+          exportFilename={`billed_ar_${agingMode}_aging.csv`}
+          onRowClick={(row) => openDrill(row, agingMode === 'initFile' ? 'initBucket' : agingMode === 'dos' ? 'dosBucket' : 'madBucket')}
         />
       </div>
 
@@ -455,31 +440,13 @@ export default function BilledArTab({ filteredData }) {
 
       {/* Drill-Down Panel */}
       {drillRow && drillType && (
-        <DrillDownPanel
+        <DrillAnalyticsPanel
           title={drillTitle(drillRow, drillType)}
-          subtitle={`Billed AR — ${drillType === 'initBucket' ? 'Initial File Date Bucket' : drillType === 'madBucket' ? 'MAD Aging Bucket' : drillType === 'payer' ? 'Payer Performance' : 'Response Status'}`}
+          subtitle={`Billed AR — ${drillType === 'initBucket' ? 'Initial File Date Bucket' : drillType === 'madBucket' ? 'MAD Aging Bucket' : drillType === 'dosBucket' ? 'DOS Aging Bucket' : drillType === 'payer' ? 'Payer Performance' : 'Response Status'}`}
+          rows={drillClaims}
           onClose={closeDrill}
-        >
-          <div className="section-gap">
-            <div className="summary-row">
-              <div className="summary-item">
-                <div className="si-label">Balance</div>
-                <div className="si-value" style={{ color: 'var(--danger)' }}>{fmt$(drillSummary.balance)}</div>
-              </div>
-              <div className="summary-item">
-                <div className="si-label">Claims</div>
-                <div className="si-value">{drillSummary.count.toLocaleString()}</div>
-              </div>
-            </div>
-            <SortableTable
-              columns={DRILL_CLAIM_COLS}
-              data={drillClaims}
-              pageSize={50}
-              exportFilename={`billed_ar_drill_${drillType}.csv`}
-              emptyMessage="No matching claims."
-            />
-          </div>
-        </DrillDownPanel>
+          exportFilename="billed-drill"
+        />
       )}
 
     </div>

@@ -3,16 +3,16 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import {
-  buildAtbAgingBreakdown,
   buildAtbPayerBreakdown,
   buildAtbDenialBreakdown,
   buildBucketBreakdown,
+  buildStackedAgingByBucket,
   STANDARD_BUCKET_ORDER,
   BALANCE_TIER_ORDER,
   hasDenialCode,
 } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
-import DrillDownPanel from '../DrillDownPanel.jsx';
+import DrillAnalyticsPanel from './DrillAnalyticsPanel.jsx';
 import { fmt$, fmtPct } from '../../utils/format.js';
 
 const AGING_COLUMNS = [
@@ -20,7 +20,10 @@ const AGING_COLUMNS = [
   { key: 'Unbilled', label: 'Unbilled', filterType: 'number', render: (r) => fmt$(r.Unbilled) },
   { key: 'Unresponded', label: 'Unresponded', filterType: 'number', render: (r) => fmt$(r.Unresponded) },
   { key: 'Responded', label: 'Responded', filterType: 'number', render: (r) => fmt$(r.Responded) },
-  { key: '_total', label: 'Total', filterType: 'number', render: (r) => fmt$(r.Unbilled + r.Unresponded + r.Responded) },
+  {
+    key: '_total', label: 'Total', filterType: 'number',
+    render: (r) => fmt$((r.Unbilled || 0) + (r.Unresponded || 0) + (r.Responded || 0)),
+  },
 ];
 
 const TIER_COLUMNS = [
@@ -48,21 +51,10 @@ const DENIAL_COLUMNS = [
   { key: 'pctOfTotal', label: '% of Denied', filterType: 'number', render: (r) => fmtPct(r.pctOfTotal) },
 ];
 
-const DRILL_COLUMNS = [
-  { key: '_status', label: 'Status', filterType: 'multiselect', render: (r) => <span className="badge badge-navy">{r._status}</span> },
-  { key: '_carrier', label: 'Carrier', filterType: 'text' },
-  { key: 'InsurancePlanDescription', label: 'Plan', filterType: 'text' },
-  { key: 'CPTCode', label: 'CPT', filterType: 'text' },
-  { key: '_balance', label: 'Balance', filterType: 'number', render: (r) => <span style={{ color: 'var(--danger)' }}>{fmt$(r._balance)}</span> },
-  { key: '_dosAge', label: 'DOS Age', filterType: 'number', render: (r) => r._dosAge != null ? `${r._dosAge}d` : '—' },
-  { key: '_balanceTier', label: 'Balance Tier', filterType: 'multiselect' },
-  { key: 'Location State', label: 'State', filterType: 'multiselect' },
-  { key: 'FirstDenialCode', label: 'Denial Code', filterType: 'text' },
-];
-
 const STACKED_COLORS = { Unbilled: '#1e40af', Unresponded: '#f97316', Responded: '#16a34a' };
 
 export default function OverviewTab({ filteredData }) {
+  const [agingMode, setAgingMode] = useState('dos');
   const [drillRows, setDrillRows] = useState(null);
   const [drillTitle, setDrillTitle] = useState('');
 
@@ -79,11 +71,18 @@ export default function OverviewTab({ filteredData }) {
     return { total, unbilled, unresponded, responded, denied, claims };
   }, [filteredData]);
 
-  const agingData = useMemo(() => buildAtbAgingBreakdown(filteredData), [filteredData]);
+  const agingData = useMemo(
+    () => buildStackedAgingByBucket(
+      filteredData,
+      agingMode === 'dos' ? '_dosBucket' : 'MAD Aging Bucket',
+      STANDARD_BUCKET_ORDER,
+    ),
+    [filteredData, agingMode],
+  );
 
   const tierData = useMemo(
     () => buildBucketBreakdown(filteredData, '_balanceTier', BALANCE_TIER_ORDER),
-    [filteredData]
+    [filteredData],
   );
 
   const payerData = useMemo(() => buildAtbPayerBreakdown(filteredData), [filteredData]);
@@ -134,9 +133,15 @@ export default function OverviewTab({ filteredData }) {
         </div>
       </div>
 
-      {/* Stacked DOS Aging */}
+      {/* Stacked Aging with DOS/MAD toggle */}
       <div className="panel">
-        <div className="panel-header"><span className="panel-title">DOS Aging — All AR</span></div>
+        <div className="panel-header">
+          <span className="panel-title">{agingMode === 'dos' ? 'DOS Aging — All AR' : 'MAD Aging — All AR'}</span>
+          <div className="aging-mode-toggle">
+            <button type="button" className={agingMode === 'dos' ? 'active' : ''} onClick={() => setAgingMode('dos')}>DOS Age</button>
+            <button type="button" className={agingMode === 'mad' ? 'active' : ''} onClick={() => setAgingMode('mad')}>MAD Age</button>
+          </div>
+        </div>
         <div className="panel-body">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={agingData} margin={{ top: 4, right: 16, left: 16, bottom: 4 }}>
@@ -156,8 +161,8 @@ export default function OverviewTab({ filteredData }) {
           data={agingData}
           exportFilename="overview-aging.csv"
           onRowClick={(row) => openDrill(
-            filteredData.filter((r) => r._dosBucket === row.bucket),
-            `DOS Bucket: ${row.bucket}`
+            filteredData.filter((r) => (agingMode === 'dos' ? r._dosBucket : r['MAD Aging Bucket']) === row.bucket),
+            `${agingMode === 'dos' ? 'DOS' : 'MAD'} Bucket: ${row.bucket}`,
           )}
         />
       </div>
@@ -182,7 +187,7 @@ export default function OverviewTab({ filteredData }) {
           exportFilename="overview-tiers.csv"
           onRowClick={(row) => openDrill(
             filteredData.filter((r) => r._balanceTier === row.bucket),
-            `Balance Tier: ${row.bucket}`
+            `Balance Tier: ${row.bucket}`,
           )}
         />
       </div>
@@ -196,7 +201,7 @@ export default function OverviewTab({ filteredData }) {
           exportFilename="overview-payers.csv"
           onRowClick={(row) => openDrill(
             filteredData.filter((r) => r._carrier === row.carrier),
-            `Carrier: ${row.carrier}`
+            `Carrier: ${row.carrier}`,
           )}
         />
       </div>
@@ -218,29 +223,20 @@ export default function OverviewTab({ filteredData }) {
             exportFilename="overview-denials.csv"
             onRowClick={(row) => openDrill(
               filteredData.filter((r) => String(r.FirstDenialCode || '').trim().toUpperCase() === row.code),
-              `Denial Code: ${row.code}`
+              `Denial Code: ${row.code}`,
             )}
           />
         )}
       </div>
 
-      {/* Drill-down panel */}
+      {/* Drill-down via DrillAnalyticsPanel */}
       {drillRows && (
-        <DrillDownPanel title={drillTitle} onClose={closeDrill}>
-          <div className="summary-row" style={{ marginBottom: 16 }}>
-            <div className="summary-item">
-              <div className="si-label">Balance</div>
-              <div className="si-value" style={{ color: 'var(--danger)' }}>
-                {fmt$(drillRows.reduce((s, r) => s + r._balance, 0))}
-              </div>
-            </div>
-            <div className="summary-item">
-              <div className="si-label">Claims</div>
-              <div className="si-value">{drillRows.length.toLocaleString()}</div>
-            </div>
-          </div>
-          <SortableTable columns={DRILL_COLUMNS} data={drillRows} exportFilename="overview-drill.csv" pageSize={50} />
-        </DrillDownPanel>
+        <DrillAnalyticsPanel
+          title={drillTitle}
+          rows={drillRows}
+          onClose={closeDrill}
+          exportFilename="overview-drill"
+        />
       )}
     </div>
   );

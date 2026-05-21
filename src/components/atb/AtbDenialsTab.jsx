@@ -11,7 +11,7 @@ import {
   hasDenialCode,
 } from '../../utils/atbCalculations.js';
 import SortableTable from '../SortableTable.jsx';
-import DrillDownPanel from '../DrillDownPanel.jsx';
+import DrillAnalyticsPanel from './DrillAnalyticsPanel.jsx';
 import { fmt$, fmtPct } from '../../utils/format.js';
 
 // ── Column Constants ──────────────────────────────────────────────────────────
@@ -345,6 +345,7 @@ function groupByCode(rows) {
 
 export default function AtbDenialsTab({ filteredData }) {
   const [drill, setDrill] = useState(null); // { type, row }
+  const [denialAgingMode, setDenialAgingMode] = useState('dos');
 
   // Partition rows
   const denialRows = useMemo(
@@ -389,10 +390,10 @@ export default function AtbDenialsTab({ filteredData }) {
     [denialRows, allBilledRows],
   );
 
-  // ── Section 4: DOS Aging ─────────────────────────────────────────────────
+  // ── Section 4: DOS/MAD Aging ─────────────────────────────────────────────
   const bucketBreakdown = useMemo(
-    () => buildBucketBreakdown(denialRows, '_dosBucket', STANDARD_BUCKET_ORDER),
-    [denialRows],
+    () => buildBucketBreakdown(denialRows, denialAgingMode === 'dos' ? '_dosBucket' : 'MAD Aging Bucket', STANDARD_BUCKET_ORDER),
+    [denialRows, denialAgingMode],
   );
   const bucketChartData = useMemo(
     () => bucketBreakdown.map((r) => ({ name: r.bucket, balance: r.balance })),
@@ -415,6 +416,9 @@ export default function AtbDenialsTab({ filteredData }) {
     }
     if (type === 'dosBucket') {
       return denialRows.filter((r) => r._dosBucket === row.bucket);
+    }
+    if (type === 'madBucket') {
+      return denialRows.filter((r) => r['MAD Aging Bucket'] === row.bucket);
     }
     if (type === 'pathway') {
       return denialRows.filter(
@@ -442,6 +446,7 @@ export default function AtbDenialsTab({ filteredData }) {
     if (type === 'code') return `Denial Code: ${row.code}`;
     if (type === 'payer') return `Carrier: ${row.carrier}`;
     if (type === 'dosBucket') return `DOS Bucket: ${row.bucket}`;
+    if (type === 'madBucket') return `MAD Bucket: ${row.bucket}`;
     if (type === 'pathway') return `Pathway: ${row.firstCode} → ${row.lastCode}`;
     return '';
   }, [drill]);
@@ -452,6 +457,7 @@ export default function AtbDenialsTab({ filteredData }) {
     if (type === 'code') return `${row.group || ''} — ${drillClaims.length} claims`;
     if (type === 'payer') return `${drillClaims.length} denied claims`;
     if (type === 'dosBucket') return `${drillClaims.length} denied claims in this aging bucket`;
+    if (type === 'madBucket') return `${drillClaims.length} denied claims in this MAD aging bucket`;
     if (type === 'pathway') return `${drillClaims.length} re-denied claims`;
     return '';
   }, [drill, drillClaims]);
@@ -559,11 +565,17 @@ export default function AtbDenialsTab({ filteredData }) {
         />
       </div>
 
-      {/* ── Section 4: DOS Aging of Denied Claims ── */}
+      {/* ── Section 4: DOS/MAD Aging of Denied Claims ── */}
       <div>
         <div className="panel-header" style={{ background: 'var(--card)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', border: '1px solid var(--border)', borderBottom: 'none', padding: '12px 16px' }}>
-          <div className="panel-title">DOS Aging of Denied Claims</div>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Denied balance by days-since-service bucket</span>
+          <div className="panel-title">{denialAgingMode === 'dos' ? 'DOS Aging of Denied Claims' : 'MAD Aging of Denied Claims'}</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div className="aging-mode-toggle">
+              <button type="button" className={denialAgingMode === 'dos' ? 'active' : ''} onClick={() => setDenialAgingMode('dos')}>DOS Age</button>
+              <button type="button" className={denialAgingMode === 'mad' ? 'active' : ''} onClick={() => setDenialAgingMode('mad')}>MAD Age</button>
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Denied balance by aging bucket</span>
+          </div>
         </div>
 
         {bucketChartData.length > 0 && (
@@ -601,7 +613,7 @@ export default function AtbDenialsTab({ filteredData }) {
           pageSize={15}
           exportFilename="denial_dos_aging.csv"
           emptyMessage="No aging data found."
-          onRowClick={(row) => setDrill({ type: 'dosBucket', row })}
+          onRowClick={(row) => setDrill({ type: denialAgingMode === 'dos' ? 'dosBucket' : 'madBucket', row })}
         />
       </div>
 
@@ -625,51 +637,13 @@ export default function AtbDenialsTab({ filteredData }) {
 
       {/* ── Drill-down Panel ── */}
       {drill && (
-        <DrillDownPanel title={drillTitle} subtitle={drillSubtitle} onClose={() => setDrill(null)}>
-          <div className="section-gap">
-
-            {/* Matching claims table */}
-            <div>
-              <div className="drill-section-title">Matching Claims ({drillClaims.length})</div>
-              <SortableTable
-                columns={DRILL_CLAIM_COLS}
-                data={drillClaims}
-                pageSize={20}
-                exportFilename={`drill_claims_${drill.type}.csv`}
-                emptyMessage="No matching claims."
-              />
-            </div>
-
-            {/* Secondary: payer breakdown when drilling by code */}
-            {drill.type === 'code' && drillSecondaryPayerRows.length > 0 && (
-              <div>
-                <div className="drill-section-title">Payers Affected</div>
-                <SortableTable
-                  columns={DRILL_PAYER_COLS}
-                  data={drillSecondaryPayerRows}
-                  pageSize={15}
-                  exportFilename={`drill_payers_${drill.row.code}.csv`}
-                  emptyMessage="No payer breakdown available."
-                />
-              </div>
-            )}
-
-            {/* Secondary: code breakdown when drilling by payer */}
-            {drill.type === 'payer' && drillSecondaryCodeRows.length > 0 && (
-              <div>
-                <div className="drill-section-title">Denial Codes for this Carrier</div>
-                <SortableTable
-                  columns={DRILL_CODE_COLS}
-                  data={drillSecondaryCodeRows}
-                  pageSize={15}
-                  exportFilename={`drill_codes_${drill.row.carrier}.csv`}
-                  emptyMessage="No code breakdown available."
-                />
-              </div>
-            )}
-
-          </div>
-        </DrillDownPanel>
+        <DrillAnalyticsPanel
+          title={drillTitle}
+          subtitle={drillSubtitle}
+          rows={drillClaims}
+          onClose={() => setDrill(null)}
+          exportFilename={`denial-drill-${drill.type}`}
+        />
       )}
 
     </div>
